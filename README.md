@@ -22,6 +22,7 @@
   <a href="#the-method">The method</a> ·
   <a href="#run-it">Run it</a> ·
   <a href="#pre-registrations">Pre-registrations</a> ·
+  <a href="#contributing">Contributing</a> ·
   <a href="#reference">Reference</a>
 </p>
 
@@ -205,6 +206,25 @@ Both confirmatory tests were written down, dated and frozen before any held-out 
 The frozen code archives, `P-Q-Agent-prereg1.zip` and `P-Q-Agent-prereg2.zip`, are attached to the
 [v1.0.0 release](https://github.com/TanmayCJ/P-Quant/releases/tag/v1.0.0). The code here is newer than both;
 the cross-asset study, model-size comparison and date-clustered slopes came later and are exploratory.
+
+## Contributing
+
+The audit gets stronger with every model, asset and setting it is run on. Contributions are welcome:
+
+| You can add | What you send | Where |
+|---|---|---|
+| **An audit run** | your config, the `metrics.csv` and `tests.csv` the harness wrote, and a provenance sheet | [`contrib/runs/`](contrib/) |
+| **Tests** | deterministic tests on synthetic data, no network or GPU | [`tests/`](tests/) |
+| **Code** | fixes, baselines, model adapters, metrics | [`kronos_agent/`](kronos_agent/) |
+
+Null and negative results count as much as positive ones. Commit results only, never raw prices,
+news or model outputs, and score only windows after the model's training cutoff.
+
+Start with [`CONTRIBUTING.md`](CONTRIBUTING.md), which includes the setup, the run steps and the
+**contribution terms**. To plan a run first, open a
+[*Propose an audit run*](https://github.com/TanmayCJ/P-Quant/issues/new?template=audit_run.yml) issue.
+Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md); security problems go to
+[`SECURITY.md`](SECURITY.md).
 
 ## Reference
 
