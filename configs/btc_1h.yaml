@@ -1,0 +1,38 @@
+# BTC/USDT hourly, 24h-ahead, non-overlapping daily origins.
+asset: BTC-USDT
+source: ccxt
+exchange: binanceus        # binance.com returns HTTP 451 from US IPs (Colab)
+symbol: BTC/USDT
+timeframe: 1h
+data_start: "2022-06-01"
+data_end: "2026-10-19"
+lookback: 256      # T4 compute budget
+pred_len: 24
+stride: 24
+windows:
+  # Kronos pretraining data ends June 2024 -> in-sample, for the contamination audit.
+  pre_cutoff: ["2023-07-01", "2024-06-20"]
+  # After both Kronos (2024-06) and Llama-3.1 (2023-12) cutoffs -> headline results.
+  post_cutoff: ["2024-07-01", "2026-10-15"]
+n_paths: 32
+batch_paths: 32
+T: 1.0
+top_p: 0.9
+amp: true          # fp16; checked vs fp32 on 5 BTC origins (diffs within sampling noise)
+seed: 1234
+model_id: NeoQuasar/Kronos-base
+tokenizer_id: NeoQuasar/Kronos-Tokenizer-base
+
+# Phase 2
+bars_per_year: 8760
+cost_bps: 10          # spot taker fee per side
+
+
+# Phase 3 (news + LLM)
+news:
+  symbols: [BTCUSD]
+  asset_name: "Bitcoin (BTC/USD)"
+  aliases: ["Bitcoin", "BTCUSD", "BTC/USD", "BTC"]
+  horizon_text: "24 hours"
+  lookback_hours: 24
+  max_headlines: 25

@@ -1,0 +1,20 @@
+# Phase B: Kronos / Chronos on the equities of the LLM studies
+asset: UNH
+source: yfinance
+symbol: UNH
+timeframe: 1d
+data_start: '2023-06-01'
+data_end: '2026-10-19'
+pred_len: 5
+stride: 5
+seed: 1234
+windows:
+  confirm:
+  - '2024-07-01'
+  - '2026-10-10'
+lookback: 256
+n_paths: 32
+batch_paths: 32
+amp: true
+bars_per_year: 252
+cost_bps: 2

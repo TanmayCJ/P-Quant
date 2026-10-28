@@ -1,0 +1,35 @@
+# SPY daily, 5-day-ahead, daily origins (overlapping targets -> DM/HAC horizon 5).
+asset: SPY
+source: yfinance
+symbol: SPY
+timeframe: 1d
+data_start: "2020-06-01"
+data_end: "2026-10-19"
+lookback: 256      # T4 compute budget
+pred_len: 5
+stride: 1
+windows:
+  pre_cutoff: ["2023-07-01", "2024-06-20"]
+  post_cutoff: ["2024-07-01", "2026-10-10"]
+n_paths: 32
+batch_paths: 32
+T: 1.0
+top_p: 0.9
+amp: true          # fp16; checked vs fp32 on 5 BTC origins (diffs within sampling noise)
+seed: 1234
+model_id: NeoQuasar/Kronos-base
+tokenizer_id: NeoQuasar/Kronos-Tokenizer-base
+
+# Phase 2
+bars_per_year: 252
+cost_bps: 2           # commission + half-spread per side
+
+
+# Phase 3 (news + LLM)
+news:
+  symbols: [SPY, QQQ, DIA]
+  asset_name: "SPY (SPDR S&P 500 ETF, tracks the US S&P 500 index)"
+  aliases: ["SPDR S&P 500", "S&P 500", "S&P", "SPY", "SPX"]
+  horizon_text: "5 trading days"
+  lookback_hours: 48
+  max_headlines: 25

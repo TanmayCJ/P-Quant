@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kronos-agent"
+version = "1.0.0"
+description = "Audit harness for LLM news signals and financial foundation models (Kronos, Chronos)"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+data = ["ccxt", "yfinance"]
+model = ["torch>=2.0", "einops", "huggingface_hub", "safetensors"]
+chronos = ["chronos-forecasting"]
+llm = ["torch>=2.0", "transformers", "accelerate", "bitsandbytes", "requests"]
+stats = ["scipy"]
+
+[tool.setuptools.packages.find]
+include = ["kronos_agent*"]

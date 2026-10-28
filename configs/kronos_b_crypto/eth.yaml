@@ -1,0 +1,19 @@
+# Phase B: ETH hourly, 24h-ahead, daily origins at 00:00 UTC (after both training cutoffs)
+asset: ETH-USDT
+source: ccxt
+exchange: binanceus
+symbol: ETH/USDT
+timeframe: 1h
+data_start: "2024-04-01"
+data_end: "2026-10-19"
+pred_len: 24
+stride: 24
+seed: 1234
+windows:
+  confirm: ["2024-07-01", "2026-10-15"]
+lookback: 64
+n_paths: 32
+batch_paths: 32
+amp: true
+bars_per_year: 8760
+cost_bps: 10

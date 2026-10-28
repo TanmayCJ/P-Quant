@@ -1,0 +1,29 @@
+# Pre-registered confirmation set (see PREREGISTRATION.md)
+asset: AMZN
+source: yfinance
+symbol: AMZN
+timeframe: 1d
+data_start: '2023-06-01'
+data_end: '2026-10-19'
+pred_len: 5
+stride: 5
+windows:
+  confirm:
+  - '2024-07-01'
+  - '2026-10-10'
+lookback: 64
+seed: 1234
+news:
+  symbols:
+  - AMZN
+  asset_name: Amazon.com Inc. (AMZN)
+  aliases:
+  - Amazon
+  - AMZN
+  - AWS
+  - Andy Jassy
+  - Jeff Bezos
+  - Bezos
+  horizon_text: 5 trading days
+  lookback_hours: 48
+  max_headlines: 25

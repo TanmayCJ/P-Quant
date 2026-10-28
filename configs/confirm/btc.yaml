@@ -1,0 +1,31 @@
+# Pre-registered confirmation set (see PREREGISTRATION.md)
+asset: BTC-USDT
+source: ccxt
+exchange: binanceus
+symbol: BTC/USDT
+timeframe: 1h
+data_start: '2022-06-01'
+data_end: '2026-10-19'
+pred_len: 24
+stride: 24
+windows:
+  confirm_a:
+  - '2024-07-01'
+  - '2025-01-01'
+  confirm_b:
+  - '2025-07-01'
+  - '2026-10-15'
+lookback: 64
+seed: 1234
+news:
+  symbols:
+  - BTCUSD
+  asset_name: Bitcoin (BTC/USD)
+  aliases:
+  - Bitcoin
+  - BTCUSD
+  - BTC/USD
+  - BTC
+  horizon_text: 24 hours
+  lookback_hours: 24
+  max_headlines: 25

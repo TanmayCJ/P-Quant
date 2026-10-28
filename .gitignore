@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+.ipynb_checkpoints/
+
+# run outputs and caches (never commit price data, news, scores or model outputs)
+data/
+paths/
+news/
+reports/
+*.parquet
+*.zip
+
+# secrets
+.env
+*.key

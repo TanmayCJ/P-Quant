@@ -1,0 +1,26 @@
+# Pre-registered confirmation set (see PREREGISTRATION.md)
+asset: NVDA
+source: yfinance
+symbol: NVDA
+timeframe: 1d
+data_start: '2023-06-01'
+data_end: '2026-10-19'
+pred_len: 5
+stride: 5
+windows:
+  confirm:
+  - '2024-07-01'
+  - '2026-10-10'
+lookback: 64
+seed: 1234
+news:
+  symbols:
+  - NVDA
+  asset_name: NVIDIA Corp. (NVDA)
+  aliases:
+  - Nvidia
+  - NVDA
+  - Jensen Huang
+  horizon_text: 5 trading days
+  lookback_hours: 48
+  max_headlines: 25

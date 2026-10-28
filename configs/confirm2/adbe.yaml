@@ -1,0 +1,28 @@
+# Pre-registration 2 confirmation set (see PREREGISTRATION_2.md)
+asset: ADBE
+source: yfinance
+symbol: ADBE
+timeframe: 1d
+data_start: '2023-06-01'
+data_end: '2026-10-19'
+pred_len: 5
+stride: 5
+lookback: 64
+seed: 1234
+windows:
+  confirm:
+  - '2024-07-01'
+  - '2026-10-10'
+llm:
+  mode: labels
+news:
+  symbols:
+  - ADBE
+  asset_name: Adobe Inc. (ADBE)
+  aliases:
+  - Adobe
+  - ADBE
+  - Photoshop
+  horizon_text: 5 trading days
+  lookback_hours: 48
+  max_headlines: 25

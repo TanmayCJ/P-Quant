@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "P-Quant: an audit harness for LLM news signals and financial foundation models"
+version: 1.0.0
+date-released: 2026-10-28
+license: MIT
+authors:
+  - family-names: "Jain"
+    given-names: "Tanmay C"
+repository-code: "https://github.com/TanmayCJ/P-Quant"

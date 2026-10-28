@@ -1,0 +1,21 @@
+# Phase A (artifact study): SPY on the same grid as the confirmation equities
+# (5-day horizon, every 5th trading day, 64-bar volatility window).
+asset: SPY
+source: yfinance
+symbol: SPY
+timeframe: 1d
+data_start: "2023-06-01"
+data_end: "2026-10-19"
+pred_len: 5
+stride: 5
+lookback: 64
+seed: 1234
+windows:
+  confirm: ["2024-07-01", "2026-10-10"]
+news:
+  symbols: [SPY, QQQ, DIA]
+  asset_name: "SPY (SPDR S&P 500 ETF, tracks the US S&P 500 index)"
+  aliases: ["SPDR S&P 500", "S&P 500", "S&P", "SPY", "SPX"]
+  horizon_text: "5 trading days"
+  lookback_hours: 48
+  max_headlines: 25
