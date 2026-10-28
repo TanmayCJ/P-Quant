@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in the harness is broken or gives wrong numbers
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The command you ran and the config you used (paste it or link it).
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Error or output
+      render: text
+  - type: input
+    id: commit
+    attributes:
+      label: Harness commit
+      description: Output of `git rev-parse HEAD`
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Python 3.11, Colab T4, torch 2.4"
+  - type: checkboxes
+    id: leakage
+    attributes:
+      label: Leakage
+      options:
+        - label: This bug could let future data or in-training data reach the scoring

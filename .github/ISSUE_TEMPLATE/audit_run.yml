@@ -1,0 +1,42 @@
+name: Propose an audit run
+description: Plan a new model / asset / setting before running it
+labels: ["audit-run"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to agree on a run before spending GPU time. Once it is done, submit the results
+        as a PR to `contrib/runs/` (see CONTRIBUTING.md).
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      placeholder: "NeoQuasar/Kronos-base, amazon/chronos-bolt-small, your own model"
+    validations:
+      required: true
+  - type: input
+    id: cutoff
+    attributes:
+      label: Model training cutoff
+      description: Published cutoff date and where it is stated.
+    validations:
+      required: true
+  - type: input
+    id: assets
+    attributes:
+      label: Assets and timeframe
+      placeholder: "SPY, QQQ, 1d"
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Data source
+      placeholder: "yfinance, ccxt (Binance)"
+    validations:
+      required: true
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis and test (optional, but encouraged)
+      description: What you expect to find and how it will be judged, written before running.

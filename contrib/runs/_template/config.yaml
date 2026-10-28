@@ -1,0 +1,22 @@
+# Copy a config from configs/ (for example configs/spy_1d.yaml) over this file,
+# then change only what your run needs and list every change in PROVENANCE.md.
+asset: SPY
+source: yfinance
+symbol: SPY
+timeframe: 1d
+data_start: "2020-06-01"
+data_end: "2026-10-19"
+lookback: 256
+pred_len: 5
+stride: 1
+windows:
+  pre_cutoff: ["2023-07-01", "2024-06-20"]
+  post_cutoff: ["2024-07-01", "2026-10-10"]
+n_paths: 32
+batch_paths: 32
+T: 1.0
+top_p: 0.9
+amp: true
+seed: 1234
+model_id: NeoQuasar/Kronos-base
+tokenizer_id: NeoQuasar/Kronos-Tokenizer-base

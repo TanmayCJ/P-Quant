@@ -1,0 +1,28 @@
+name: Feature request
+description: A new baseline, model adapter, metric or analysis
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What you would like
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters for the audit
+      description: What question would this let the harness answer?
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: Possible approach
+      description: Optional. References for the method, or a rough design.
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to implement this myself

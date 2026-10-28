@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/TanmayCJ/P-Quant/blob/main/SECURITY.md
+    about: Please report security issues privately by email, not as an issue.
