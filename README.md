@@ -1,4 +1,4 @@
-# P-Quant: kronos-agent audit harness
+# P-Quant: harness tooling
 
 A research harness, with configs and pre-registrations, for auditing zero-shot financial foundation
 models and LLM news signals under leakage controls.
