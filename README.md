@@ -1,174 +1,215 @@
-# P-Quant: harness tooling
+<p align="center">
+  <img src="docs/img/hero.svg" alt="P-Quant: an open-source audit for market forecasting models" width="100%">
+</p>
 
-A research harness, with configs and pre-registrations, for auditing zero-shot financial foundation
-models and LLM news signals under leakage controls.
+<p align="center">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-A5603A?style=flat-square&labelColor=2E3529">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-76845A?style=flat-square&labelColor=2E3529">
+  <img alt="44 tests passing" src="https://img.shields.io/badge/tests-44%20passing-76845A?style=flat-square&labelColor=2E3529">
+  <img alt="11 Colab notebooks" src="https://img.shields.io/badge/notebooks-11%20%C2%B7%20Colab%20T4-DCA278?style=flat-square&labelColor=2E3529">
+  <img alt="Scored Jul 2024 to Oct 2026" src="https://img.shields.io/badge/scored-Jul%202024%20%E2%80%93%20Oct%202026-CDD4B1?style=flat-square&labelColor=2E3529">
+</p>
 
-Foundation models for price series (Kronos, Chronos) and LLMs that read news are now cheap to run
-zero-shot, and each comes with reported forecasting gains. Each is also exposed to look-ahead bias,
-training-data contamination and design choices that leak signal. This repository is the harness we used
-to test them under controls designed to catch those failure modes. The study started as an attempt to fuse
-Kronos's sampled price paths with an LLM's reading of timestamped news; the controls kept catching gains
-that were not real, and the results below are what survived.
+<p align="center">
+  <b>Can a model predict the market?</b><br>
+  <i>P-Quant puts three of them through the same controls and reports what survives.</i>
+</p>
 
-**Short answer:** nothing did. Under the controls, neither the foundation models nor the LLM news signal
-gave a forecasting edge we could confirm, and the one signal that looked real came from how the question
-was asked.
-
-![Audit pipeline: data, leakage filter, forecasters, controls, calibration, scoring, pre-registered replication](docs/img/audit_pipeline.svg)
-
----
-
-## Contents
-1. [What is tested](#what-is-tested)
-2. [The audit protocol](#the-audit-protocol)
-3. [Method in brief](#method-in-brief)
-4. [Main results](#main-results)
-5. [Repository layout](#repository-layout)
-6. [Installation](#installation)
-7. [Running the tests](#running-the-tests)
-8. [Reproducing the results](#reproducing-the-results)
-9. [Pre-registrations](#pre-registrations)
-10. [Data, keys and licences](#data-keys-and-licences)
-11. [Known limitations](#known-limitations)
-12. [Citation](#citation)
+<p align="center">
+  <a href="#the-idea">The idea</a> ·
+  <a href="#the-controls">The controls</a> ·
+  <a href="#what-we-found">What we found</a> ·
+  <a href="#the-method">The method</a> ·
+  <a href="#run-it">Run it</a> ·
+  <a href="#pre-registrations">Pre-registrations</a> ·
+  <a href="#reference">Reference</a>
+</p>
 
 ---
 
-## What is tested
+## The idea
 
-| Component | Model | How it is used |
+Two kinds of model now forecast markets straight out of the box. **Kronos** and **Chronos** read price
+charts and sample possible futures. **Llama-3.1-8B** reads the day's headlines and says which way it thinks a
+stock will move. Each arrives with impressive numbers attached.
+
+Impressive numbers are cheap. A model may have seen the answers during training, a headline may leak
+tomorrow's news, or the way a question is phrased may create a signal on its own. P-Quant is the harness that
+checks for all three. It started as an attempt to fuse price paths with news into one sharper forecast. The
+controls kept catching gains that were not real.
+
+> **The short version.** Under the controls, none of the models gave a forecasting edge that held up, and the
+> one signal that looked real came from how the question was asked.
+
+| | Model | How it is used |
 |---|---|---|
-| Price foundation model | [Kronos](https://github.com/shiyu-coder/Kronos)-base (102M), -small (24.7M), -mini (4.1M) | Zero-shot, 32 sampled OHLCV paths per forecast, fp16 on a T4 |
-| Comparison model | Chronos-T5-small (46M) | Same sampling interface and evaluation as Kronos |
-| News reader | Llama-3.1-8B-Instruct, 4-bit NF4 | Reads up to 25 leakage-safe Benzinga headlines; answers are read as next-token probabilities over answer letters, not generated text |
-| Baselines | Gaussian with recent volatility, bootstrap, random walk | Calibrated simple references on the same dates |
+| **Price model** | [Kronos](https://github.com/shiyu-coder/Kronos) base · small · mini (102M · 24.7M · 4.1M) | zero-shot, 32 sampled price paths per forecast, fp16 on a T4 |
+| **Comparison** | Chronos-T5-small (46M) | same sampling interface and scoring as Kronos |
+| **News reader** | Llama-3.1-8B-Instruct, 4-bit | up to 25 leakage-safe Benzinga headlines; answers read as next-token probabilities |
+| **Benchmarks** | Gaussian with recent volatility · bootstrap · random walk | simple, calibrated references on the same dates |
 
-Assets: SPY, QQQ, IWM and 26 US large caps (5-trading-day horizon, daily bars), plus BTC/USDT and ETH/USDT
-(24-hour horizon, hourly bars). The headline period is **July 2024 to October 2026**, after both models'
-training cutoffs.
+**Universe.** SPY, QQQ, IWM and 26 US large caps on daily bars at a 5-day horizon, plus BTC and ETH on hourly
+bars at 24 hours. Every headline result is scored **July 2024 to October 2026**, after both models stopped
+learning.
 
-## The audit protocol
+## The controls
 
-Each control is implemented in code and applied to every headline result.
+<p align="center"><img src="docs/img/audit_pipeline.svg" alt="Seven controls: data, leakage filter, forecast, placebo, calibration, scoring, pre-registered replication" width="100%"></p>
 
-| Control | What it rules out | Where |
+| Control | What it rules out | Where in the code |
 |---|---|---|
-| **Dual training cutoff.** Kronos pretraining ends 2024-06, Llama-3.1 ends 2023-12; only forecasts from 2024-07 on are scored. The year before is kept as an in-sample contrast. | Memorized outcomes | `config.py`, `data.py` (`label_period`) |
-| **Leakage-safe news timing.** A headline is used only if it was created *and last updated* before the information time (prior close at 20:00 UTC for equities, the forecast hour for crypto). Edited articles are dropped, not truncated. | Look-ahead through late edits | `news.py` |
-| **Shuffled-news placebo.** Each forecast gets the headlines of a randomly chosen other date, with its own price context kept. A real news effect must vanish. | Effects that are not about the news | `newsrun.py` |
-| **Anonymization.** Names, tickers, executives and dates are removed from the prompt. | Recall of the company instead of reading the news | `llm.py`, `newsrun.py` |
-| **Pre-registration.** Hypothesis, held-out data and test fixed in a dated file before scoring, with the code frozen by hash. | Forking paths, selective reporting | `PREREGISTRATION*.md`, `confirm.py` |
-| **Online, delay-aware calibration.** Every correction (EMOS, ACI, conformal) uses only outcomes realized before the forecast and resets at the training cutoff. | Calibration that peeks at the future | `conformal.py`, `phase2.py` |
+| **Two training cutoffs.** Kronos stops in 2024-06 and Llama-3.1 in 2023-12; only forecasts from 2024-07 count, and the year before stays as an in-sample contrast. | answers memorized in training | `config.py`, `data.py` |
+| **News timing.** A headline counts only if it was created *and last edited* before the decision time. Edited articles are dropped, not trimmed. | look-ahead through late edits | `news.py` |
+| **Shuffled-news placebo.** Every forecast is re-run with another day's headlines. A real news effect has to disappear. | effects that have nothing to do with news | `newsrun.py` |
+| **Anonymized prompts.** Company names, tickers, people and dates are removed. | recalling the company instead of reading the story | `llm.py`, `newsrun.py` |
+| **Online calibration.** Every correction uses only outcomes already known at forecast time. | calibration that peeks at the future | `conformal.py`, `phase2.py` |
+| **Pre-registration.** Hypothesis, data and test are fixed in a dated file, with the code frozen by hash, before scoring. | moving the goalposts | `PREREGISTRATION*.md`, `confirm.py` |
 
-Scoring uses CRPS, interval coverage and PIT for distributions and the information coefficient (IC) for
-signals. Significance uses Diebold–Mariano tests with Newey–West variance and the HLN correction, pooled
-tests across assets (cross-asset average per date, then Newey–West), Driscoll–Kraay standard errors for
-slopes averaged across assets, Holm corrections and permutation tests (`metrics.py`, `confirm.py`).
+Distributions are scored with CRPS, interval coverage and PIT; signals with the information coefficient.
+Significance comes from Diebold–Mariano tests with Newey–West variance, pooled tests across assets,
+Driscoll–Kraay standard errors, Holm corrections and permutation tests.
 
-## Method in brief
+## What we found
 
-**Window-mean gap.** For a forecast made at $t$ with lookback $L$ and last close $P_t$:
+### 1 · Kronos keeps betting on a snap-back
+
+<p align="center"><img src="docs/img/reversion_slopes.svg" alt="Reversion slopes by model and lookback, real data and random walks" width="100%"></p>
+
+Kronos pulls its forecasts back toward the average price of the window it was shown. On SPY at a 256-bar
+lookback the slope is **−0.64**, and the tokenizer is not to blame: it rebuilds prices within 0.09%. The pull
+shows up even on pure random walks, where Kronos forecasts against the true trend in **98–100%** of series.
+Bigger Kronos models pull harder; Chronos does not pull at all.
+
+| Model | 64 bars, real (t) | 256 bars, real (t) | 256 bars, random walks |
+|---|---:|---:|---:|
+| Kronos-mini · 4.1M | −0.04 (−3.2) | +0.02 (2.3) | +0.04 |
+| Kronos-small · 24.7M | −0.19 (−10.4) | −0.55 (−22.6) | −0.32 |
+| Kronos-base · 102M | −0.19 (−10.9) | −0.70 (−33.1) | −0.42 |
+| Chronos-T5-small | +0.002 (0.2) | +0.001 (0.3) | +0.01 |
+
+<sub>Driscoll–Kraay t-statistics. Kronos-mini uses a different tokenizer, so the clean size comparison is small against base. Exploratory, not pre-registered.</sub>
+
+### 2 · Fixed, it is calibrated, but no better than a bell curve
+
+<p align="center"><img src="docs/img/crps_vs_gaussian.svg" alt="Forecast error versus a Gaussian benchmark, raw and corrected" width="100%"></p>
+
+An online correction removes the bias. Raw Kronos at 256 bars is **229%** worse than a plain Gaussian; corrected,
+the gap shrinks to **3.4%**, and it never closes. Across 29 US assets, no corrected model beats the benchmark.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/img/calibration.svg" alt="Interval coverage after correction: 52, 82 and 91 percent at the 50, 80 and 90 percent levels"></td>
+<td width="50%"><img src="docs/img/news_fusion.svg" alt="News fusion: CRPS 0.0468 alone, 0.0415 with real headlines, 0.0414 with shuffled headlines"></td>
+</tr>
+<tr>
+<td><sub>After correction on SPY, the 50%, 80% and 90% intervals cover 52%, 82% and 91% of outcomes.</sub></td>
+<td><sub>Adding the news reading cut error from 0.0468 to 0.0415. Shuffled headlines did the same: the fusion was fixing Kronos's bias, not reading news.</sub></td>
+</tr>
+</table>
+
+### 3 · Ask the wrong way and you get a signal from nothing
+
+<p align="center"><img src="docs/img/false_positive_rates.svg" alt="False-positive rates of the pooled test by elicitation mode" width="100%"></p>
+
+Ask the model for probabilities over return ranges that scale with recent volatility, and its habitual
+bearishness turns into a volatility signal (correlation **−0.50**). That signal looks significant even with
+shuffled headlines, and it fires in **95%** of simulated markets that contain no information at all. Fixed
+ranges or plain up/down labels make it go away.
 
 $$
-g_t = \log P_t - \frac{1}{L}\sum_{s=t-L+1}^{t}\log P_s
+\mathbb{E}_{q_t}[r] = \sigma_t\, m(q_t), \qquad
+\mathrm{corr}\big(\mathbb{E}_{q_t}[r],\, r_{t+h}\big) = \mathrm{sign}\big(m(q)\big)\cdot \mathrm{corr}\big(\sigma_t,\, r_{t+h}\big)
 $$
 
-The reversion slope $b$ comes from regressing the mean forecast log return $\mu_t$ on the gap,
-$\mu_t = a + b\,g_t + \varepsilon_t$. A forecaster with no reversion has $b = 0$ on random walks.
+### 4 · Two pre-registered replications
 
-**Online EMOS correction** (`conformal.py`). Each ensemble member $x_{t,j}$ is mapped to
+The contrarian news signal that came out of the exploratory work was tested twice on fresh data, with the
+test fixed in advance. It missed on 10 held-out assets (Holm p = 0.056, with the placebo just as significant),
+and with the artifact removed it found nothing on 20 new large caps (IC +0.005, one-sided p = 0.60).
+
+## The method
+
+**Window-mean gap.** For a forecast at $t$ with lookback $L$ and last close $P_t$, and the reversion slope $b$:
+
+$$
+g_t = \log P_t - \frac{1}{L}\sum_{s=t-L+1}^{t}\log P_s, \qquad \mu_t = a + b\,g_t + \varepsilon_t
+$$
+
+**Online correction** (`conformal.py`). Each sampled path $x_{t,j}$ is re-centred and re-scaled using only past
+outcomes: ridge weights over the last 250 realized forecasts, and a spread factor $k_t = \sqrt{\overline{(e/s)^2}}$.
 
 $$
 \tilde{x}_{t,j} = \alpha_t + \beta_t\,\mu_t + \gamma_t\,g_t + k_t\,(x_{t,j} - \mu_t)
 $$
 
-with $(\alpha_t, \beta_t, \gamma_t)$ from a ridge regression on the last 250 realized origins (50-origin
-warm-up) and the spread factor $k_t = \sqrt{\overline{(e/s)^2}}$ matching ensemble spread $s$ to past
-residuals $e$.
-
-**Score.** Forecasts are compared on the continuous ranked probability score, estimated from the ensemble:
+**Score.** The continuous ranked probability score against a benchmark of $N(0, \hat\sigma_t^2 h)$:
 
 $$
 \mathrm{CRPS}(F, y) = \mathbb{E}_F\lvert X - y\rvert - \tfrac{1}{2}\,\mathbb{E}_F\lvert X - X'\rvert
 $$
 
-The benchmark is $N(0, \hat\sigma_t^2 h)$, with $\hat\sigma_t$ the volatility of the same context window.
-
-**Pooled news test** (`confirm.py`). Per asset, signal and realized return are z-scored; their product is
-averaged across assets on each date and tested one-sided with Newey–West:
+**Pooled news test** (`confirm.py`), one-sided with Newey–West, and **date-clustered slopes** (`phaseb.py`):
 
 $$
-d_t = \frac{1}{N_t}\sum_{i=1}^{N_t} z(\text{signal}_{it})\, z(r_{i,t+h}), \qquad H_0:\ \mathbb{E}[d_t] \ge 0
+d_t = \frac{1}{N_t}\sum_{i=1}^{N_t} z(\text{signal}_{it})\, z(r_{i,t+h}), \qquad
+\widehat{\mathrm{Var}}(\bar b) = \sum_{\ell=-m}^{m}\Big(1 - \frac{|\ell|}{m+1}\Big)\sum_t u_t\,u_{t-\ell}
 $$
 
-**Date-clustered slopes** (`phaseb.py`). Assets share dates, so the mean slope $\bar b$ uses
-Driscoll–Kraay standard errors built from each date's influence $u_t$:
+## Run it
 
-$$
-\widehat{\mathrm{Var}}(\bar b) = \sum_{\ell=-m}^{m}\Big(1 - \frac{|\ell|}{m+1}\Big)\sum_t u_t\,u_{t-\ell},
-\qquad u_t = \frac{1}{N}\sum_{i=1}^{N}\frac{\tilde g_{it}\,\hat e_{it}}{\sum_s \tilde g_{is}^2}
-$$
+```bash
+git clone https://github.com/TanmayCJ/P-Quant && cd P-Quant
+pip install -e ".[data,stats]"
+python -m tests.run_all          # 44 tests · CPU only · no keys, no network
+```
 
-## Main results
+The tests use a fake predictor and synthetic prices. They cover the metrics, resumable sampling, leakage-safe
+news selection, calibration, fusion, the pre-registered tests, the artifact simulation and the reports.
 
-**1. Kronos reverts its forecasts toward the mean price of its input window.** On SPY (5-day horizon,
-256-bar lookback) the slope of the mean forecast on the gap between the last price and the window mean is
-−0.64 after the cutoff and −0.98 before it. The tokenizer reconstructs prices faithfully (0.09% error), so
-the reversion is learned by the model. On synthetic random walks, where the future does not depend on the
-gap, Kronos forecasts against the true trend in 98–100% of series at 256 bars; Chronos does so 33–55% of
-the time, close to chance.
+Two results reproduce on any laptop, no data needed:
 
-![Reversion slopes by model and lookback, real data with 95% Driscoll–Kraay intervals and synthetic random walks](docs/img/reversion_slopes.svg)
+```bash
+python scripts/run_artifact.py --simulate --seeds 200      # the 95% false-positive simulation
+python scripts/sim_permutation_size.py 200 2000            # size of the pooled tests
+```
 
-**2. After correction, no foundation model beats a Gaussian.** Across the 29 US assets (65 scored dates
-each, pooled test by date):
+**The full study** runs on free Colab T4s, about 16–17 GPU-hours in all, and every notebook resumes after a
+disconnect. Zip this folder as `kronos-agent.zip`, upload it to `MyDrive/kronos-agent/`, add the Colab
+Secrets `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` and `HF_TOKEN` for notebooks 03–06, and run in order.
 
-| Model, lookback | CRPS vs Gaussian, raw | Corrected, pre-specified estimator (p) | Corrected, pooled estimator (p) |
+| Notebook | Finding | What it does | Runs on |
+|---|:---:|---|---|
+| `01_sample_kronos` | 1 · 2 | Kronos path sampling on SPY and BTC, baselines, online calibration | T4 |
+| `02_diagnose_bias` | 1 | window-mean reversion, tokenizer round-trip, lookback sensitivity | T4 |
+| `03_news_llm` | 2 | news retrieval, Llama scoring, fusing news into the forecast | T4 + keys |
+| `04_confirm` | 4 | pre-registration 1 | T4 + keys |
+| `05_artifact` | 3 | volatility-scaling artifact, three elicitation modes | T4 + keys |
+| `06_confirm2` | 4 | pre-registration 2 | T4 + keys |
+| `07_phaseb` | 1 · 2 | 29 US assets and ETH, Chronos comparison, random walks | T4 |
+| `08_diagnostics` | 2 · 4 | spread-estimator sensitivity, permutation p-values | CPU |
+| `09_export_dashboard` | – | exports results for the companion dashboard | CPU |
+| `10_model_size` | 1 | Kronos mini / small / base comparison | T4 |
+| `11_slope_inference` | 1 | date-clustered tests of the reversion slopes | CPU |
+
+<sub>Sampling is seeded, but fp16 GPU sampling is not bit-identical across hardware, so reruns can differ in the last digit.</sub>
+
+## Pre-registrations
+
+Both confirmatory tests were written down, dated and frozen before any held-out data were scored.
+
+| File | Hypothesis | Code hash | Result |
 |---|---|---|---|
-| Kronos-base, 64 | +16% | +2.8% (0.006) | +1.0% (0.31) |
-| Kronos-base, 256 | +229% | +3.4% (0.004) | +1.3% (0.24) |
-| Chronos-T5-small, 64 | +4% | +4.1% (0.03) | +4.3% (0.01) |
-| Chronos-T5-small, 256 | −0.3% | +1.1% (0.31) | +0.2% (0.87) |
+| `PREREGISTRATION.md` | Expected return from volatility-scaled ranges is negatively correlated with the realized return (8 equities, BTC, ETH) | `126982343bb64796` | not confirmed |
+| `PREREGISTRATION_2.md` | P(up) − P(down) from direction labels is negatively correlated with the 5-day return (20 new large caps) | `fedc56a9cea61e65` | not confirmed |
 
-Positive = worse than the Gaussian.
+The frozen code archives, `P-Q-Agent-prereg1.zip` and `P-Q-Agent-prereg2.zip`, are attached to the
+[v1.0.0 release](https://github.com/TanmayCJ/P-Quant/releases/tag/v1.0.0). The code here is newer than both;
+the cross-asset study, model-size comparison and date-clustered slopes came later and are exploratory.
 
-**3. The reversion grows with Kronos model size (exploratory).** Slope of the forecast on the gap, real data
-(Driscoll–Kraay t in brackets) and synthetic walks:
+## Reference
 
-| Model | 64 bars, real | 64 bars, synthetic | 256 bars, real | 256 bars, synthetic |
-|---|---|---|---|---|
-| Kronos-mini (4.1M) | −0.04 (−3.2) | −0.05 | +0.02 (2.3) | +0.04 |
-| Kronos-small (24.7M) | −0.19 (−10.4) | −0.08 | −0.55 (−22.6) | −0.32 |
-| Kronos-base (102M) | −0.19 (−10.9) | −0.16 | −0.70 (−33.1) | −0.42 |
-| Chronos-T5-small | +0.002 (0.2) | – | +0.001 (0.3) | – |
-
-Kronos-mini uses a different tokenizer, so the clean comparison is small vs base.
-
-**4. Fusing LLM news into the forecast did not help.** Pooling news onto raw Kronos cut CRPS from 0.0468
-to 0.0415 (p < 10⁻⁸), but shuffled headlines gave the same gain (0.0414): the fusion was only correcting
-Kronos's bias. On calibrated forecasts it never improved CRPS.
-
-**5. The volatility-scaling artifact.** If the LLM is asked for probabilities over return ranges scaled by
-recent volatility, its habitual bearishness makes the elicited expected return proportional to volatility
-(correlation −0.50). That yields a significant "contrarian" signal even from shuffled headlines, and false
-positives in 95% of simulated panels with no information. Fixed ranges or direction labels remove it.
-
-With range centres $c_k$ set in units of volatility $\sigma_t$ and answer distribution $q_t$, the elicited
-mean is $\mathbb{E}_{q_t}[r] = \sigma_t\, m(q_t)$ with $m(q) = \sum_k q_k c_k$. Under a stable response bias,
-
-$$
-\mathrm{corr}\big(\mathbb{E}_{q_t}[r],\, r_{t+h}\big) = \mathrm{sign}\big(m(q)\big)\cdot \mathrm{corr}\big(\sigma_t,\, r_{t+h}\big)
-$$
-
-so a bearish model shows a negative IC wherever returns rebound after volatile periods, with or without news.
-
-![Share of 200 simulated no-information panels rejecting at 5%, by elicitation mode](docs/img/false_positive_rates.svg)
-
-**6. Two pre-registered replications failed.** The contrarian signal missed on 10 held-out assets (Holm
-p = 0.056, with the placebo equally significant), and, with the artifact removed, found nothing on 20 new
-large caps (IC +0.005, one-sided p = 0.60).
-
-## Repository layout
+<details>
+<summary><b>Repository layout</b></summary>
 
 ```
 kronos_agent/          the package
@@ -178,32 +219,25 @@ kronos_agent/          the package
   data.py              market data loading, caching, forecast-origin grids
   evaluate.py          Kronos vs Gaussian / bootstrap / random-walk baselines, pre vs post cutoff
   conformal.py         online, delay-aware EMOS, ACI and conformal calibration
-  policy.py            trade-or-abstain policy and cost-aware backtest (reported in early phases only)
+  policy.py            trade-or-abstain policy and cost-aware backtest (early phases only)
   news.py, newsrun.py  Alpaca/Benzinga news, leakage-safe headline selection, per-origin LLM scoring
   llm.py               prompts and next-token probability readout over answer letters A..G
   fusion.py            log-linear pooling of ensemble paths with LLM probabilities
   confirm.py           pre-registered pooled IC tests, placebo, Holm, permutation tests
   artifact.py          volatility-scaling artifact: decomposition and simulation
-  phase2.py, phase3.py, phaseb.py  report logic for calibration, fusion and the cross-asset / synthetic study
+  phase2.py, phase3.py, phaseb.py  reports for calibration, fusion and the cross-asset / synthetic study
   metrics.py           CRPS, PIT, coverage, IC, Diebold–Mariano, HAC and Driscoll–Kraay SEs, bootstrap
   export.py            packs results for the companion dashboard
 scripts/               command-line entry points (one per stage; all resumable, all take --root)
-configs/               one YAML per asset and study
-  spy_1d.yaml, btc_1h.yaml   exploratory set
-  confirm/             pre-registration 1 (8 equities + BTC, ETH)
-  artifact/            artifact study (SPY; the 8 equities come from confirm/)
-  confirm2/            pre-registration 2 (20 new S&P 100 large caps)
-  kronos_b/            29 US assets for the cross-asset study
-  kronos_b_crypto/     ETH hourly
-notebooks/             Colab drivers, one per stage (see below)
+configs/               one YAML per asset and study (exploratory, confirm/, artifact/, confirm2/, kronos_b/)
+notebooks/             Colab drivers, one per stage
 tests/                 44 unit tests, CPU only, fake models and synthetic data
-docs/img/              README figures (python scripts/make_readme_figures.py redraws them; needs matplotlib)
-PREREGISTRATION.md, PREREGISTRATION_2.md
+docs/img/              README figures (python scripts/make_readme_figures.py redraws them)
 ```
+</details>
 
-## Installation
-
-Python 3.10 or later.
+<details>
+<summary><b>Install options</b></summary>
 
 ```bash
 pip install -e .                     # core: numpy, pandas, pyarrow, pyyaml
@@ -212,102 +246,45 @@ pip install -e ".[model,chronos]"    # Kronos / Chronos sampling (GPU recommende
 pip install -e ".[llm]"              # Llama scoring in 4-bit (needs a CUDA GPU)
 ```
 
-Kronos is not vendored. Clone it next to this repo and pass its path to the sampling scripts:
+Kronos is not vendored. Clone it next to this repo and point the sampling scripts at it:
 
 ```bash
-git clone https://github.com/TanmayCJ/P-Quant && cd P-Quant
 git clone https://github.com/shiyu-coder/Kronos
 python scripts/run_sampling.py --root results --kronos-path Kronos --config configs/spy_1d.yaml
 ```
 
-## Running the tests
+Results land under the chosen root: `data/` (cached prices), `paths/<run tag>/part-*.parquet` (sampled paths; the
+tag encodes asset, model and lookback, so runs never mix) and `reports/<study>/`.
+</details>
 
-```bash
-python -m tests.run_all      # or: pytest
-```
+<details>
+<summary><b>Data, keys and licences</b></summary>
 
-The tests use a fake predictor and synthetic prices, so they need no GPU, network or keys. They cover the
-metrics and significance tests, resumable sampling, leakage-safe news selection, calibration, fusion, the
-pre-registered tests, the artifact simulation, the cross-asset report and the dashboard export.
-
-## Reproducing the results
-
-The notebooks are the intended entry point. Each one targets a free Colab T4, needs only the previous
-stages' outputs, and resumes after a disconnect: rerun **Setup**, then the step you were on.
-
-1. Zip this folder as `kronos-agent.zip` and upload it to `MyDrive/kronos-agent/` (the Setup cell unpacks it
-   to `MyDrive/kronos-agent/code`).
-2. For notebooks 03–06, add Colab Secrets `ALPACA_API_KEY`, `ALPACA_SECRET_KEY` and `HF_TOKEN` and enable
-   notebook access for each.
-3. Run the notebooks in order.
-
-| Notebook | Main result | What it does | Hardware |
-|---|---|---|---|
-| `01_sample_kronos` | 1, 2 | Kronos path sampling on SPY and BTC, baseline evaluation, online calibration | T4 |
-| `02_diagnose_bias` | 1 | Window-mean reversion, tokenizer round-trip, lookback sensitivity, EMOS correction | T4 |
-| `03_news_llm` | 4 | News retrieval, Llama scoring, fusion of news into the forecast | T4, keys |
-| `04_confirm` | 6 | Pre-registration 1 | T4, keys |
-| `05_artifact` | 5 | Volatility-scaling artifact: three elicitation modes, real and shuffled news | T4, keys |
-| `06_confirm2` | 6 | Pre-registration 2 | T4, keys |
-| `07_phaseb` | 1, 2 | 29 US assets + ETH, Chronos comparison, synthetic random walks (≈3–3.5 GPU-hours) | T4 |
-| `08_diagnostics` | 2, 6 | Spread-estimator sensitivity (ETH), permutation p-values | CPU |
-| `09_export_dashboard` | – | Exports results for the companion dashboard | CPU |
-| `10_model_size` | 3 | Kronos-mini / -small / -base comparison, exploratory (≈1–1.5 GPU-hours) | T4 |
-| `11_slope_inference` | 3 | Date-clustered (Driscoll–Kraay) tests of the reversion slopes | CPU |
-
-The whole study took about 16–17 GPU-hours. Results land on Drive under `MyDrive/kronos-agent/`:
-`data/` (cached prices), `paths/<run tag>/part-*.parquet` (sampled paths; the tag encodes asset, model and
-lookback, so runs never mix) and `reports/<study>/` (CSV reports).
-
-Two parts need no data and run on any CPU:
-
-```bash
-python scripts/run_artifact.py --simulate --seeds 200        # artifact simulation: false-positive rates
-python scripts/sim_permutation_size.py 200 2000              # size of the pooled tests: HAC vs permutation
-```
-
-Sampling is seeded, but GPU sampling in fp16 is not bit-for-bit deterministic across hardware, so rerun
-numbers can differ in the last digits.
-
-## Pre-registrations
-
-Both confirmatory tests were fixed in dated files before any held-out data were scored:
-
-| File | Hypothesis | Code hash | Result |
-|---|---|---|---|
-| `PREREGISTRATION.md` | The LLM's expected return from volatility-scaled ranges is negatively correlated with the realized return (8 equities, BTC, ETH) | `126982343bb64796` | Not confirmed |
-| `PREREGISTRATION_2.md` | P(up) − P(down) from direction labels is negatively correlated with the 5-day return (20 new large caps) | `fedc56a9cea61e65` | Not confirmed |
-
-The frozen code archives they refer to (`P-Q-Agent-prereg1.zip`, `P-Q-Agent-prereg2.zip`) are
-attached to the GitHub release. The code in this repository is later than both archives; analyses added
-afterwards (the cross-asset study, model size, date-clustered slopes) are exploratory, not pre-registered.
-
-## Data, keys and licences
-
-- **No data is redistributed.** The repo contains no prices, headlines, LLM scores or sampled paths.
-  Prices come from Yahoo Finance (via yfinance) and exchanges (via ccxt); headlines from the Alpaca news API
-  (Benzinga), which requires your own Alpaca account.
-- **Keys** are read only from environment variables or Colab Secrets; none are stored in the code.
-- **Model licences:** Kronos (MIT), Chronos (Apache-2.0) and Llama-3.1 (Meta Llama 3.1 Community Licence;
-  accept it on Hugging Face before use) have their own terms.
-- This repository is released under the MIT licence (`LICENSE`).
+- **No data is redistributed.** No prices, headlines, LLM scores or sampled paths live in this repo. Prices come
+  from Yahoo Finance (yfinance) and exchanges (ccxt); headlines from the Alpaca news API (Benzinga), which needs
+  your own Alpaca account.
+- **Keys** are read only from environment variables or Colab Secrets. None are stored in the code.
+- **Model licences:** Kronos (MIT), Chronos (Apache-2.0) and Llama-3.1 (Meta Llama 3.1 Community Licence; accept
+  it on Hugging Face first) keep their own terms.
+- P-Quant itself is released under the MIT licence (`LICENSE`).
 
 This is research code for evaluating forecasts. It is not investment advice and is not meant for trading.
+</details>
 
-## Known limitations
+<details>
+<summary><b>Known limitations</b></summary>
 
-- yfinance `auto_adjust=True` applies today's split and dividend adjustments to history. Data is cached
-  once, and evaluation refuses to run if the cached data change.
-- Future bar timestamps (the calendar only) are taken from the data. They are known in advance except for
-  unscheduled closures.
-- CRPS uses the standard ensemble estimator, which is biased at small ensemble sizes. Every method uses the
-  same number of samples, so comparisons are fair.
+- yfinance `auto_adjust=True` applies today's split and dividend adjustments to history. Data is cached once, and
+  evaluation refuses to run if the cache changes.
+- Future bar timestamps (the calendar only) come from the data; they are known in advance except for unscheduled closures.
+- CRPS uses the standard ensemble estimator, which is biased at small ensembles. Every method uses the same
+  number of samples, so comparisons stay fair.
 - Benzinga coverage is thin for several large caps, which lowers the power of pre-registration 2.
-- One open 8B model reading headlines only; larger models or full articles may behave differently.
+- One open 8B model reading headlines only. Larger models or full articles may behave differently.
+</details>
 
-## Citation
-
-If you use this code, please cite the software:
+<details>
+<summary><b>Cite this software</b></summary>
 
 ```bibtex
 @software{jain2026pquant,
@@ -320,3 +297,10 @@ If you use this code, please cite the software:
 ```
 
 Machine-readable metadata is in `CITATION.cff`.
+</details>
+
+---
+
+<p align="center">
+  <sub><b>Built by <a href="https://github.com/TanmayCJ">TanmayCJ</a></b> · MIT licence · <i>Audit the forecast before you trust it.</i></sub>
+</p>
