@@ -14,20 +14,23 @@ that were not real, and the results below are what survived.
 gave a forecasting edge we could confirm, and the one signal that looked real came from how the question
 was asked.
 
+![Audit pipeline: data, leakage filter, forecasters, controls, calibration, scoring, pre-registered replication](docs/img/audit_pipeline.svg)
+
 ---
 
 ## Contents
 1. [What is tested](#what-is-tested)
 2. [The audit protocol](#the-audit-protocol)
-3. [Main results](#main-results)
-4. [Repository layout](#repository-layout)
-5. [Installation](#installation)
-6. [Running the tests](#running-the-tests)
-7. [Reproducing the results](#reproducing-the-results)
-8. [Pre-registrations](#pre-registrations)
-9. [Data, keys and licences](#data-keys-and-licences)
-10. [Known limitations](#known-limitations)
-11. [Citation](#citation)
+3. [Method in brief](#method-in-brief)
+4. [Main results](#main-results)
+5. [Repository layout](#repository-layout)
+6. [Installation](#installation)
+7. [Running the tests](#running-the-tests)
+8. [Reproducing the results](#reproducing-the-results)
+9. [Pre-registrations](#pre-registrations)
+10. [Data, keys and licences](#data-keys-and-licences)
+11. [Known limitations](#known-limitations)
+12. [Citation](#citation)
 
 ---
 
@@ -62,6 +65,50 @@ signals. Significance uses Diebold–Mariano tests with Newey–West variance an
 tests across assets (cross-asset average per date, then Newey–West), Driscoll–Kraay standard errors for
 slopes averaged across assets, Holm corrections and permutation tests (`metrics.py`, `confirm.py`).
 
+## Method in brief
+
+**Window-mean gap.** For a forecast made at $t$ with lookback $L$ and last close $P_t$:
+
+$$
+g_t = \log P_t - \frac{1}{L}\sum_{s=t-L+1}^{t}\log P_s
+$$
+
+The reversion slope $b$ comes from regressing the mean forecast log return $\mu_t$ on the gap,
+$\mu_t = a + b\,g_t + \varepsilon_t$. A forecaster with no reversion has $b = 0$ on random walks.
+
+**Online EMOS correction** (`conformal.py`). Each ensemble member $x_{t,j}$ is mapped to
+
+$$
+\tilde{x}_{t,j} = \alpha_t + \beta_t\,\mu_t + \gamma_t\,g_t + k_t\,(x_{t,j} - \mu_t)
+$$
+
+with $(\alpha_t, \beta_t, \gamma_t)$ from a ridge regression on the last 250 realized origins (50-origin
+warm-up) and the spread factor $k_t = \sqrt{\overline{(e/s)^2}}$ matching ensemble spread $s$ to past
+residuals $e$.
+
+**Score.** Forecasts are compared on the continuous ranked probability score, estimated from the ensemble:
+
+$$
+\mathrm{CRPS}(F, y) = \mathbb{E}_F\lvert X - y\rvert - \tfrac{1}{2}\,\mathbb{E}_F\lvert X - X'\rvert
+$$
+
+The benchmark is $N(0, \hat\sigma_t^2 h)$, with $\hat\sigma_t$ the volatility of the same context window.
+
+**Pooled news test** (`confirm.py`). Per asset, signal and realized return are z-scored; their product is
+averaged across assets on each date and tested one-sided with Newey–West:
+
+$$
+d_t = \frac{1}{N_t}\sum_{i=1}^{N_t} z(\text{signal}_{it})\, z(r_{i,t+h}), \qquad H_0:\ \mathbb{E}[d_t] \ge 0
+$$
+
+**Date-clustered slopes** (`phaseb.py`). Assets share dates, so the mean slope $\bar b$ uses
+Driscoll–Kraay standard errors built from each date's influence $u_t$:
+
+$$
+\widehat{\mathrm{Var}}(\bar b) = \sum_{\ell=-m}^{m}\Big(1 - \frac{|\ell|}{m+1}\Big)\sum_t u_t\,u_{t-\ell},
+\qquad u_t = \frac{1}{N}\sum_{i=1}^{N}\frac{\tilde g_{it}\,\hat e_{it}}{\sum_s \tilde g_{is}^2}
+$$
+
 ## Main results
 
 **1. Kronos reverts its forecasts toward the mean price of its input window.** On SPY (5-day horizon,
@@ -70,6 +117,8 @@ slopes averaged across assets, Holm corrections and permutation tests (`metrics.
 the reversion is learned by the model. On synthetic random walks, where the future does not depend on the
 gap, Kronos forecasts against the true trend in 98–100% of series at 256 bars; Chronos does so 33–55% of
 the time, close to chance.
+
+![Reversion slopes by model and lookback, real data with 95% Driscoll–Kraay intervals and synthetic random walks](docs/img/reversion_slopes.svg)
 
 **2. After correction, no foundation model beats a Gaussian.** Across the 29 US assets (65 scored dates
 each, pooled test by date):
@@ -104,6 +153,17 @@ recent volatility, its habitual bearishness makes the elicited expected return p
 (correlation −0.50). That yields a significant "contrarian" signal even from shuffled headlines, and false
 positives in 95% of simulated panels with no information. Fixed ranges or direction labels remove it.
 
+With range centres $c_k$ set in units of volatility $\sigma_t$ and answer distribution $q_t$, the elicited
+mean is $\mathbb{E}_{q_t}[r] = \sigma_t\, m(q_t)$ with $m(q) = \sum_k q_k c_k$. Under a stable response bias,
+
+$$
+\mathrm{corr}\big(\mathbb{E}_{q_t}[r],\, r_{t+h}\big) = \mathrm{sign}\big(m(q)\big)\cdot \mathrm{corr}\big(\sigma_t,\, r_{t+h}\big)
+$$
+
+so a bearish model shows a negative IC wherever returns rebound after volatile periods, with or without news.
+
+![Share of 200 simulated no-information panels rejecting at 5%, by elicitation mode](docs/img/false_positive_rates.svg)
+
 **6. Two pre-registered replications failed.** The contrarian signal missed on 10 held-out assets (Holm
 p = 0.056, with the placebo equally significant), and, with the artifact removed, found nothing on 20 new
 large caps (IC +0.005, one-sided p = 0.60).
@@ -137,6 +197,7 @@ configs/               one YAML per asset and study
   kronos_b_crypto/     ETH hourly
 notebooks/             Colab drivers, one per stage (see below)
 tests/                 44 unit tests, CPU only, fake models and synthetic data
+docs/img/              README figures (python scripts/make_readme_figures.py redraws them; needs matplotlib)
 PREREGISTRATION.md, PREREGISTRATION_2.md
 ```
 
