@@ -1,4 +1,4 @@
-"""Phase 3a: fetch news (cached) and score each forecast origin with Llama (resumable).
+"""Fetch the news (cached) and have the LLM score every forecast date. Safe to rerun: it resumes.
 
 Needs env ALPACA_API_KEY, ALPACA_SECRET_KEY (news) and HF_TOKEN (Llama) - set them from
 Colab Secrets, never in code. Several configs / variants share one loaded model.

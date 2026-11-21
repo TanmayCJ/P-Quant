@@ -1,4 +1,4 @@
-"""Phase 3b: news-likelihood fusion report (CPU).
+"""News fusion report: blend the LLM's reading of the news into the forecasts (CPU only).
 
 python scripts/run_phase3.py --config configs/spy_1d.yaml --root $ROOT
 """

@@ -1,3 +1,4 @@
+"""Load a YAML config on top of the defaults below; command-line overrides win."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,14 +21,14 @@ DEFAULTS = {
     "tokenizer_id": "NeoQuasar/Kronos-Tokenizer-base",
     "max_context": 512,
     "amp": False,               # fp16 autocast on CUDA (validate vs fp32 before using for results)
-    # Phase 2
+    # calibration and trading policy (phase2.py)
     "cost_bps": 10.0,           # per side
     "bars_per_year": None,      # required for annualization (8760 for 1h crypto, 252 for 1d equity)
     "calib": {"warmup": 50, "window": 250, "gamma": 0.005, "levels": [0.5, 0.8, 0.9]},
     # dist: raw|recal|spread|emos|emos_gap ; interval_method: quantile|cqr|aci (cqr/aci: raw, emos, emos_gap)
     "policy": {"level": 0.8, "dist": "emos_gap", "interval_method": "aci", "width_q": 0.5},
     "features": {"conformal": True, "abstain": True, "news": True},
-    # Phase 3
+    # news and LLM (news.py, newsrun.py, phase3.py)
     "news": {"symbols": None, "asset_name": None, "aliases": [], "horizon_text": None,
              "lookback_hours": 48, "max_headlines": 25},
     # mode: volbins | fixbins | labels (see newsrun.MODES); fixed_sigma: "median" or a number

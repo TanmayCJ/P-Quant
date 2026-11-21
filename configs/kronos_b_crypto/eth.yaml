@@ -1,4 +1,4 @@
-# Phase B: ETH hourly, 24h-ahead, daily origins at 00:00 UTC (after both training cutoffs)
+# Cross-asset study: ETH hourly, 24h ahead, one forecast a day at 00:00 UTC (after both training cutoffs)
 asset: ETH-USDT
 source: ccxt
 exchange: binanceus

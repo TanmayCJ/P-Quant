@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from kronos_agent import metrics as M
-from kronos_agent.artifact import decompose, partial_ic, simulate
+from kronos_agent.artifact import BIAS, decompose, partial_ic, shuffle_answers, simulate, tilt
 from kronos_agent.config import DEFAULTS
 from kronos_agent.fusion import bin_edges, llm_only_samples
 from kronos_agent.newsrun import build_inputs, llm_dir, origins_frame
@@ -30,6 +30,34 @@ def test_simulation_reproduces_artifact_and_controls_remove_it():
     _, pooled = decompose(simulate(info=0.4, seed=4))
     t = pooled.set_index(["mode", "variant", "signal"])["t"]
     assert t[("labels", "real", "raw")] > 3 and t[("fixbins", "real", "raw")] > 3
+
+
+def test_answer_shuffle_keeps_the_scale_and_permutes_only_the_answers():
+    T = 50
+    rng = np.random.default_rng(1)
+    sigma = 0.02 * np.exp(rng.normal(0, 0.3, T))
+    llm = pd.DataFrame({"origin_ts": pd.date_range("2025-01-01", periods=T, freq="D"),
+                        "q": list(rng.dirichlet(np.ones(7), T)), "sigma_h": sigma,
+                        "edges": list(bin_edges(sigma))})
+    sh = shuffle_answers(llm, seed=0)
+    assert (sh["sigma_h"] == llm["sigma_h"]).all() and (sh["origin_ts"] == llm["origin_ts"]).all()
+    assert all(np.array_equal(a, b) for a, b in zip(sh["edges"], llm["edges"]))
+    q0, q1 = np.stack(llm["q"]), np.stack(sh["q"])
+    assert not np.array_equal(q0, q1)
+    assert np.allclose(np.sort(q0, axis=0), np.sort(q1, axis=0))  # same answers, new dates
+
+
+def test_bias_tilt_runs_from_uniform_to_stronger():
+    assert np.allclose(tilt(BIAS, 0.0), np.full(7, 1 / 7))
+    assert np.allclose(tilt(BIAS, 1.0), BIAS)
+    assert tilt(BIAS, 1.5)[1] > BIAS[1]
+
+
+def test_other_llms_get_their_own_score_folder():
+    cfg = copy.deepcopy(DEFAULTS)
+    assert llm_dir("T", cfg, "real") == "T_real"
+    cfg["llm"] = {**cfg["llm"], "model_id": "Qwen/Qwen2.5-7B-Instruct", "mode": "labels"}
+    assert llm_dir("T", cfg, "real") == "T_labels_real_Qwen2.5-7B-Instruct"
 
 
 def test_modes_build_the_right_prompts():

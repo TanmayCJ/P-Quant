@@ -19,6 +19,7 @@ from .news import info_time, select_headlines
 from .store import ResultStore
 
 VARIANTS = ("real", "anon", "shuffled")
+DEFAULT_LLM = "meta-llama/Llama-3.1-8B-Instruct"
 # volbins: 7 ranges scaled by recent volatility; fixbins: 7 ranges with a constant per-asset
 # scale; labels: up / down / no clear effect
 MODES = ("volbins", "fixbins", "labels")
@@ -89,10 +90,13 @@ def build_inputs(cfg: dict, df: pd.DataFrame, store_df: pd.DataFrame, news: pd.D
 
 
 def llm_dir(tag: str, cfg: dict, variant: str) -> str:
-    """Folder name for one (asset settings, elicitation mode, variant) scoring run.
-    volbins keeps the original naming so earlier runs remain valid."""
+    """Folder name for one (asset settings, elicitation mode, variant, model) scoring run.
+    volbins and the default Llama keep the original naming so earlier runs remain valid; any
+    other model gets its own folder, so its scores never mix with (or skip over) Llama's."""
     mode = cfg["llm"].get("mode", "volbins")
-    return f"{tag}_{variant}" if mode == "volbins" else f"{tag}_{mode}_{variant}"
+    name = f"{tag}_{variant}" if mode == "volbins" else f"{tag}_{mode}_{variant}"
+    model = cfg["llm"].get("model_id", DEFAULT_LLM)
+    return name if model == DEFAULT_LLM else f"{name}_{model.split('/')[-1]}"
 
 
 def run_scoring(inputs: list[dict], scorer, store: ResultStore, variant: str, batch: int = 4,

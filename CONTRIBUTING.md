@@ -1,8 +1,9 @@
 # Contributing to P-Quant
 
-Thanks for helping. P-Quant is an open audit layer: it checks whether a market forecasting model
-(Kronos, Chronos, an LLM reading the news, or your own model) actually beats simple baselines once
-leakage, calibration and multiple testing are handled properly.
+Thanks for helping. P-Quant checks whether a market forecasting model (Kronos, Chronos, an LLM
+reading the news, or your own) really beats simple forecasts once you rule out the usual ways of
+fooling yourself: the model having seen the answers, news arriving too late, corrections that peek
+at the future, and running so many tests that one passes by luck.
 
 There are three ways to contribute:
 
@@ -34,8 +35,8 @@ Model sampling needs a GPU. The notebooks in `notebooks/` run on a free Colab T4
 
 ## 1. Contributing an audit run
 
-An audit run is one model, on one asset, at one setting, scored by this harness. Each accepted
-run adds one more data point to the shared record of what these models can and cannot do.
+An audit run is one model, on one asset, at one setting, scored by this harness. Every run adds
+to what we know about what these models can and can't do.
 
 **Steps**
 

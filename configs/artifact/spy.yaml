@@ -1,4 +1,4 @@
-# Phase A (artifact study): SPY on the same grid as the confirmation equities
+# Volatility-artifact study: SPY on the same schedule as the confirmation equities
 # (5-day horizon, every 5th trading day, 64-bar volatility window).
 asset: SPY
 source: yfinance

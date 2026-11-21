@@ -1,9 +1,12 @@
-"""Phase 3 report: does news-likelihood reweighting improve calibrated forecasts?
+"""News fusion report: does blending the LLM's reading of the news improve the forecast?
 
-For each period x prior (kronos_raw, kronos_emos_gap, gauss_raw) x LLM variant
-(real / anon / shuffled), fuse with online lambda and compare against the prior on
-the same scored origins: CRPS (+ DM test), PIT-KS, 80% coverage, IC, direction.
-Also reports the LLM-only forecast and the LLM signal itself (IC of E_Q[r]).
+For every combination of
+- period (before / after the cutoff),
+- starting forecast (kronos_raw, kronos_emos_gap, gauss_raw), and
+- news variant (real / anon / shuffled headlines),
+the LLM's view is blended in with a weight lambda chosen online, and the result is compared
+with the starting forecast on the same forecasts: CRPS (with a DM test), PIT-KS, 80% coverage,
+IC and direction. It also scores the LLM on its own, and its signal E_Q[r].
 """
 from __future__ import annotations
 

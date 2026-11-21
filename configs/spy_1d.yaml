@@ -20,12 +20,12 @@ seed: 1234
 model_id: NeoQuasar/Kronos-base
 tokenizer_id: NeoQuasar/Kronos-Tokenizer-base
 
-# Phase 2
+# calibration and trading policy
 bars_per_year: 252
 cost_bps: 2           # commission + half-spread per side
 
 
-# Phase 3 (news + LLM)
+# news and LLM
 news:
   symbols: [SPY, QQQ, DIA]
   asset_name: "SPY (SPDR S&P 500 ETF, tracks the US S&P 500 index)"

@@ -1,7 +1,7 @@
-"""Phase-1 baseline evaluation: Kronos ensemble vs simple probabilistic baselines.
+"""Score Kronos forecasts against simple baselines.
 
-Target: horizon log return r = log(close[i+h-1] / close[i-1]).
-Methods (all ensembles of the same size n, so CRPS is comparable):
+What we forecast: the log return over the horizon, r = log(close[i+h-1] / close[i-1]).
+Forecasters (each gives n samples, so their CRPS scores are comparable):
   kronos  - Kronos sampled paths
   gauss   - N(0, sigma_ctx * sqrt(h)), sigma from context log returns
   boot    - iid bootstrap of context 1-step log returns, summed over h

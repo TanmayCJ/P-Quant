@@ -1,4 +1,4 @@
-# Phase B: Kronos / Chronos on the equities of the LLM studies
+# Cross-asset study: Kronos and Chronos on the equities used in the LLM studies
 asset: AAPL
 source: yfinance
 symbol: AAPL

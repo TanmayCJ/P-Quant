@@ -1,9 +1,14 @@
-"""Phase 2 report: bias diagnostics, calibration (raw / recal / spread / emos, plus cqr / aci
-intervals on raw and on emos), conditional coverage, trade-or-abstain backtests,
-selective-prediction curves and a per-origin decision log.
+"""Calibration report: correct Kronos's bias and check whether its uncertainty is honest.
 
-Calibration state is reset at the start of every window (pre/post cutoff), and all
-methods are scored on the same index set (t >= warmup + delay - 1) for fairness.
+It covers:
+- bias diagnostics (how far the mean forecast is off);
+- calibration methods: raw, recal, spread, emos, and cqr / aci intervals on raw and emos;
+- coverage (do 80% intervals contain 80% of outcomes?), also by market condition;
+- a trade-or-abstain backtest, selective-prediction curves and a per-forecast decision log.
+
+Every correction restarts at the start of each window (before / after the training cutoff),
+and all methods are scored on the same forecasts (t >= warmup + delay - 1), so the
+comparison is fair.
 """
 from __future__ import annotations
 
@@ -60,7 +65,7 @@ def calibrate(X, y, cfg: dict, delay: int, gap=None):
 
 def phase2_report(ev: pd.DataFrame, cfg: dict, delay: int) -> dict[str, pd.DataFrame]:
     if not cfg.get("bars_per_year"):
-        raise ValueError("config needs bars_per_year for phase 2")
+        raise ValueError("config needs bars_per_year (e.g. 252 for daily stocks, 8760 for hourly crypto)")
     start = cfg["calib"]["warmup"] + delay - 1
     cost = cfg["cost_bps"] / 1e4
     ppy = cfg["bars_per_year"] / (cfg["stride"] * delay)

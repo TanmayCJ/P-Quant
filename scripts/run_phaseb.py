@@ -1,4 +1,4 @@
-"""Phase B cross-asset report (CPU). A run = model x lookback, given as overrides.
+"""Cross-asset report (CPU only). Each --run is one model and lookback, given as overrides.
 
 python scripts/run_phaseb.py --root $ROOT --config configs/kronos_b/*.yaml \
     --run kronos64 "lookback=64" --run kronos256 "lookback=256" \

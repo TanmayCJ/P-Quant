@@ -1,4 +1,4 @@
-﻿"""Split dashboard_data.json into row datasets for the dashboard page (local, no deps beyond stdlib).
+"""Split dashboard_data.json into row datasets for the dashboard page (local, no deps beyond stdlib).
 
 python scripts/dashboard_datasets.py <dashboard_data.json> <out_dir>
 Writes prices.json, forecasts.json, llm.json, metrics.json, reversion.json, elicitation_sim.json, preregs.json.

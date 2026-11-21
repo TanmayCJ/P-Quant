@@ -1,4 +1,4 @@
-"""Phase B mechanism test: forecast random walks with known drift (GPU).
+"""Random-walk test: forecast prices with a known drift, where the past predicts nothing (GPU).
 
 python scripts/run_synthetic.py --root $ROOT --kronos-path $KRONOS --lookback 64 256
 python scripts/run_synthetic.py --root $ROOT --model-family chronos --model-id amazon/chronos-t5-small --lookback 64 256

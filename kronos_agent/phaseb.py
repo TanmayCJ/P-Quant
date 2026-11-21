@@ -1,12 +1,14 @@
-"""Phase B: Kronos (and comparison models) across many assets + a synthetic-trend mechanism test.
+"""Cross-asset study: Kronos (and Chronos) on many assets, plus a random-walk test.
 
-Cross-asset report: per asset and run (model x lookback) -> reversion slope of the mean forecast
-on the context gap, CRPS raw / EMOS(gap)-corrected / Gaussian baseline; pooled Diebold-Mariano
-across assets on volatility-normalised CRPS differences (Fama-MacBeth style, one row per date).
+Cross-asset report. For each asset and run (a run is one model and lookback):
+- the reversion slope: how strongly the mean forecast is pulled back toward the window mean;
+- CRPS for the raw forecast, the EMOS(gap)-corrected one and the Gaussian baseline;
+- a pooled Diebold-Mariano test across assets on volatility-scaled CRPS differences
+  (Fama-MacBeth style: average across assets per date, then test over dates).
 
-Synthetic test: random-walk prices with a known drift (no mean reversion by construction). A
-forecaster that reverts to the window mean shows a negative slope on the gap where the truth
-has slope zero, and forecasts against the trend.
+Random-walk test. Prices follow a random walk with a known drift, so the past says nothing
+about the future and the true slope is zero. A model that pulls toward the window mean shows
+a negative slope here and forecasts against the trend.
 """
 from __future__ import annotations
 

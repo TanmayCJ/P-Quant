@@ -1,15 +1,25 @@
-"""Volatility-scaling artifact in LLM return elicitation (Phase A).
+"""The volatility-scaling artifact: how answer ranges scaled by volatility fake a news signal.
 
-Claim. If an LLM's answer distribution q over K return ranges is (close to) constant, and the
-ranges are scaled by recent volatility sigma_t, then the elicited expected return is
+In short: the LLM picks from return ranges whose width grows with recent volatility. If its
+answers barely change (a steady lean), the expected return it implies just tracks volatility,
+and volatility itself predicts returns, so the result looks like a news signal.
+
+In symbols: if the answer distribution q over K ranges is (close to) constant and the ranges
+are scaled by sigma_t, the elicited expected return is
     E_Q[r]_t = sigma_t * m(q),  m(q) = sum_k q_k c_k   (c_k = bin centres in sigma units),
 so corr(E_Q, r_{t+h}) = sign(m(q)) * corr(sigma_t, r_{t+h}) exactly: the "signal" is the
 volatility-return relation, carried by the prompt's ranges, with no news content at all.
 A shuffled-headline placebo keeps sigma_t and therefore reproduces the effect; fixed-scale
 ranges and direction labels do not carry it.
 
-This module provides the empirical decomposition (IC, IC per sigma, IC partialling out sigma)
-and a simulation that reproduces the mechanism under controlled conditions.
+This module provides the empirical decomposition (IC, IC per sigma, IC partialling out sigma),
+an answer-shuffle placebo for real data, and a simulation that reproduces the mechanism under
+controlled conditions.
+
+Answer-shuffle placebo. Permute the LLM's answers q across dates while keeping each date's bin
+scale and sigma. The news placebo cannot separate the two channels because it keeps sigma; this
+one breaks the answers' link to their dates and keeps only the scale. A signal that survives it
+is carried by the scale, not by what the model said.
 """
 from __future__ import annotations
 
@@ -63,15 +73,35 @@ def decompose(frames: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return pd.DataFrame(rows), pd.DataFrame(pooled)
 
 
+def shuffle_answers(llm: pd.DataFrame, seed: int) -> pd.DataFrame:
+    """Answer-shuffle placebo for one asset's scores: permute q across rows, keep everything
+    tied to the date (origin, sigma_h, edges, scale)."""
+    rng = np.random.default_rng(seed)
+    out = llm.copy()
+    out["q"] = llm["q"].to_numpy()[rng.permutation(len(llm))]
+    return out
+
+
+def tilt(bias, alpha: float) -> tuple:
+    """Scale the strength of a response bias: alpha=0 is a uniform (unbiased) answer
+    distribution, alpha=1 the bias itself, alpha>1 a stronger version of it."""
+    b = np.asarray(bias, float) ** alpha
+    return tuple(b / b.sum())
+
+
+BIAS = (0.06, 0.32, 0.30, 0.22, 0.05, 0.03, 0.02)  # bearish answer habit, close to Llama's
+
+
 def simulate(n_assets: int = 9, T: int = 400, kappa: float = 0.25, info: float = 0.0,
-             bias=(0.06, 0.32, 0.30, 0.22, 0.05, 0.03, 0.02), noise: float = 0.6, seed: int = 0) -> pd.DataFrame:
+             bias=BIAS, noise: float = 0.6, seed: int = 0) -> pd.DataFrame:
     """Synthetic panel reproducing the mechanism.
 
     sigma_t: log-AR(1) volatility. r_{t+h} = kappa * (sigma_t - mean) + sigma_t * eps (vol-return
     relation, no news). The 'LLM' answers q_t = softmax(log bias + noise_t + info * z_t), where
     z_t is the standardized future return (info=0 => no information). Labels use the same logit
     noise mapped to up/down/no-effect. Returns frames for modes volbins/fixbins/labels and
-    variants real/shuffled (shuffled permutes the LLM answers across dates, keeping sigma_t).
+    variants real/shuffled (shuffled permutes the LLM answers across dates, keeping sigma_t:
+    the answer-shuffle placebo).
     """
     rng = np.random.default_rng(seed)
     K = len(bias)

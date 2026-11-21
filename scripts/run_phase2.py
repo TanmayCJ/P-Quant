@@ -1,4 +1,4 @@
-"""Phase 2: conformal calibration + abstain policy on stored Kronos paths.
+"""Calibration report on saved Kronos paths: bias correction, intervals and the abstain policy.
 
 python scripts/run_phase2.py --config configs/btc_1h.yaml --root /content/drive/MyDrive/kronos-agent
 """
