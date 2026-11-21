@@ -3,9 +3,9 @@ import copy
 import numpy as np
 import pandas as pd
 
-from kronos_agent.confirm import asset_frame, family_test, holm, per_asset
-from kronos_agent.config import DEFAULTS
-from kronos_agent.newsrun import build_inputs, origins_frame
+from pquant.prereg_tests import asset_frame, family_test, holm, per_asset
+from pquant.config import DEFAULTS
+from pquant.news_scoring import build_inputs, origins_frame
 
 
 def _frames(rho, n_assets=6, T=120, seed=0):
@@ -29,7 +29,7 @@ def test_family_test_detects_negative_and_not_positive_or_null():
 
 
 def test_perm_test_detects_signal_and_holds_size():
-    from kronos_agent.confirm import perm_test
+    from pquant.prereg_tests import perm_test
 
     assert perm_test(_frames(-0.2), "real", B=300)["p_one_sided_neg"] < 0.01
     ps = [perm_test(_frames(0.0, seed=s), "real", B=200, seed=s)["p_one_sided_neg"] for s in range(30)]
@@ -37,8 +37,8 @@ def test_perm_test_detects_signal_and_holds_size():
 
 
 def test_pooled_spread_estimator_survives_degenerate_ensembles():
-    from kronos_agent import metrics as M
-    from kronos_agent.conformal import emos_affine
+    from pquant import metrics as M
+    from pquant.calibration import emos_affine
 
     rng = np.random.default_rng(9)
     T, n = 400, 32

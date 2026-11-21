@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from kronos_agent.config import dm_horizon, load_config, run_tag
-from kronos_agent.data import load_data
-from kronos_agent.evaluate import build_eval_frame, summarize
-from kronos_agent.store import ResultStore
+from pquant.config import dm_horizon, load_config, run_tag
+from pquant.data import load_data
+from pquant.evaluate import build_eval_frame, summarize
+from pquant.store import ResultStore
 
 
 def main():

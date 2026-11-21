@@ -4,11 +4,11 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from kronos_agent import fusion as F
-from kronos_agent import metrics as M
-from kronos_agent.config import DEFAULTS
-from kronos_agent.llm import build_messages
-from kronos_agent.news import info_time, select_headlines
+from pquant import fusion as F
+from pquant import metrics as M
+from pquant.config import DEFAULTS
+from pquant.llm import build_messages
+from pquant.news import info_time, select_headlines
 
 
 def news_frame():
@@ -118,13 +118,13 @@ class FakeScorer:
         return p, np.full(len(prompts), 0.9)
 
 
-def test_phase3_end_to_end_with_fake_llm():
-    from kronos_agent.evaluate import build_eval_frame
-    from kronos_agent.newsrun import build_inputs, run_scoring
-    from kronos_agent.phase3 import phase3_report
-    from kronos_agent.pipeline import run_sampling
-    from kronos_agent.sampler import KronosSampler
-    from kronos_agent.store import ResultStore
+def test_news_fusion_end_to_end_with_fake_llm():
+    from pquant.evaluate import build_eval_frame
+    from pquant.news_scoring import build_inputs, run_scoring
+    from pquant.news_fusion_report import news_fusion_report
+    from pquant.pipeline import run_sampling
+    from pquant.sampler import KronosSampler
+    from pquant.store import ResultStore
     from tests.test_pipeline import CFG, FakePredictor, synth_data
 
     df = synth_data(1500)
@@ -149,7 +149,7 @@ def test_phase3_end_to_end_with_fake_llm():
             assert run_scoring(inp, FakeScorer(), st, v, batch=4, log=lambda *_: None) == 0
             parts.append(st.load())
         ev = build_eval_frame(sdf, df, cfg["lookback"])
-    rep = phase3_report(ev, pd.concat(parts, ignore_index=True), cfg, delay=6)
+    rep = news_fusion_report(ev, pd.concat(parts, ignore_index=True), cfg, delay=6)
     f = rep["fusion"]
     assert set(f["variant"]) == {"real", "shuffled"}
     assert set(f.loc[f["method"] == "pool", "prior"]) == {"kronos_raw", "kronos_emos_gap", "gauss_raw"}
@@ -160,8 +160,8 @@ def test_phase3_end_to_end_with_fake_llm():
 
 
 def test_contrarian_llm_gets_negative_lambda_and_emos_learns_sign():
-    from kronos_agent.conformal import emos_affine
-    from kronos_agent.phase3 import ic_test
+    from pquant.calibration import emos_affine
+    from pquant.news_fusion_report import ic_test
 
     rng = np.random.default_rng(11)
     T, n = 1200, 32

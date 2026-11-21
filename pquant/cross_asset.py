@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 
 from . import metrics as M
-from .conformal import emos_affine
+from .calibration import emos_affine
 from .data import COLS
 
 

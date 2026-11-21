@@ -4,7 +4,7 @@ Needs env ALPACA_API_KEY, ALPACA_SECRET_KEY (news) and HF_TOKEN (Llama) - set th
 Colab Secrets, never in code. Several configs / variants share one loaded model.
 
 python scripts/run_llm.py --config configs/spy_1d.yaml --root $ROOT --variant real [--dry-run] [--limit 8]
-python scripts/run_llm.py --origins-only --config configs/confirm/*.yaml --variant real shuffled anon --root $ROOT
+python scripts/run_llm.py --origins-only --config configs/prereg1/*.yaml --variant real shuffled anon --root $ROOT
 """
 import argparse
 import json
@@ -14,11 +14,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from kronos_agent.config import load_config, run_tag
-from kronos_agent.data import load_data
-from kronos_agent.news import load_news
-from kronos_agent.newsrun import VARIANTS, build_inputs, llm_dir, llm_tag, origins_frame, run_scoring
-from kronos_agent.store import ResultStore
+from pquant.config import load_config, run_tag
+from pquant.data import load_data
+from pquant.news import load_news
+from pquant.news_scoring import VARIANTS, build_inputs, llm_dir, llm_tag, origins_frame, run_scoring
+from pquant.store import ResultStore
 
 
 def prepare(config: str, overrides: list[str], root: Path, origins_only: bool):
@@ -76,7 +76,7 @@ def main():
                 continue
             if scorer is None:
                 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")  # before torch
-                from kronos_agent.llm import LlamaScorer
+                from pquant.llm import LlamaScorer
 
                 scorer = LlamaScorer(cfg["llm"]["model_id"], token=os.environ.get("HF_TOKEN"),
                                      max_tokens=cfg["llm"]["max_tokens"])

@@ -62,11 +62,11 @@ models' training data ends.
 |---|---|---|
 | **Training cutoffs.** Kronos's training data ends in June 2024 and Llama's in December 2023. Only forecasts from July 2024 on count. The year before is kept for comparison. | the model remembering the answer | `config.py`, `data.py` |
 | **News timing.** A headline is used only if it was written *and last edited* before the forecast. Edited articles are dropped, not trimmed. | tomorrow's news leaking in through edits | `news.py` |
-| **Shuffled news.** Every forecast is rerun with headlines from a random other day. A real news effect should disappear. | effects that have nothing to do with the news | `newsrun.py` |
-| **Answer shuffle.** The LLM's answers are moved to random other days while each day keeps its own volatility. | signals that come from how the answers are scaled | `artifact.py` |
-| **Anonymised prompts.** Company names, tickers, people and dates are removed. | the model recognising the company instead of reading the story | `llm.py`, `newsrun.py` |
-| **Online corrections.** Any correction uses only outcomes already known at forecast time. | corrections that peek at the future | `conformal.py`, `phase2.py` |
-| **Pre-registration.** The hypothesis, data and test are written down and dated, and the code frozen by hash, before scoring. | changing the test after seeing the results | `PREREGISTRATION*.md`, `confirm.py` |
+| **Shuffled news.** Every forecast is rerun with headlines from a random other day. A real news effect should disappear. | effects that have nothing to do with the news | `news_scoring.py` |
+| **Answer shuffle.** The LLM's answers are moved to random other days while each day keeps its own volatility. | signals that come from how the answers are scaled | `vol_artifact.py` |
+| **Anonymised prompts.** Company names, tickers, people and dates are removed. | the model recognising the company instead of reading the story | `llm.py`, `news_scoring.py` |
+| **Online corrections.** Any correction uses only outcomes already known at forecast time. | corrections that peek at the future | `calibration.py` |
+| **Pre-registration.** The hypothesis, data and test are written down and dated, and the code frozen by hash, before scoring. | changing the test after seeing the results | `PREREGISTRATION*.md`, `prereg_tests.py` |
 
 Forecasts are scored with CRPS (lower is better), interval coverage and PIT. Signals are scored with the
 information coefficient (IC), the correlation between forecast and outcome. The statistical tests are listed
@@ -149,8 +149,8 @@ safely, calibration, news fusion, the pre-registered tests, the scaling simulati
 Three results you can reproduce on a laptop, with no data:
 
 ```bash
-python scripts/run_artifact.py --simulate --seeds 200      # the 95% false-alarm simulation
-python scripts/run_artifact.py --grid --seeds 50           # false alarms by rebound strength and lean
+python scripts/run_vol_artifact.py --simulate --seeds 200      # the 95% false-alarm simulation
+python scripts/run_vol_artifact.py --grid --seeds 50           # false alarms by rebound strength and lean
 python scripts/sim_permutation_size.py 200 2000            # how often the pooled tests cry wolf
 ```
 
@@ -164,10 +164,10 @@ where it left off after a disconnect. Zip this folder as `kronos-agent.zip` and 
 | `01_sample_kronos` | 1, 2 | Kronos forecasts for SPY and BTC, baselines, running correction | T4 |
 | `02_diagnose_bias` | 1 | the snap-back, tokenizer check, window length | T4 |
 | `03_news_llm` | 2 | fetch news, LLM scoring, blend news into the forecast | T4 + keys |
-| `04_confirm` | 4 | pre-registration 1 | T4 + keys |
-| `05_artifact` | 3 | the scaling problem, three ways of asking | T4 + keys |
-| `06_confirm2` | 4 | pre-registration 2 | T4 + keys |
-| `07_phaseb` | 1, 2 | 29 US assets and ETH, Chronos comparison, random walks | T4 |
+| `04_prereg1` | 4 | pre-registration 1 | T4 + keys |
+| `05_vol_artifact` | 3 | the scaling problem, three ways of asking | T4 + keys |
+| `06_prereg2` | 4 | pre-registration 2 | T4 + keys |
+| `07_cross_asset` | 1, 2 | 29 US assets and ETH, Chronos comparison, random walks | T4 |
 | `08_diagnostics` | 2, 4 | spread-estimator check, permutation p-values | CPU |
 | `09_export_dashboard` | – | exports results for the dashboard | CPU |
 | `10_model_size` | 1 | Kronos mini vs small vs base | T4 |
@@ -185,7 +185,9 @@ Both confirmation tests were written down, dated and frozen before any new data 
 | `PREREGISTRATION_2.md` | P(up) − P(down) from up/down labels is negatively correlated with the 5-day return (20 new large caps) | `fedc56a9cea61e65` | not confirmed |
 
 The frozen code is attached to the [v1.0.0 release](https://github.com/TanmayCJ/P-Quant/releases/tag/v1.0.0)
-as `P-Q-Agent-prereg1.zip` and `P-Q-Agent-prereg2.zip`. The code in this repo is newer than both. The
+as `P-Q-Agent-prereg1.zip` and `P-Q-Agent-prereg2.zip`. The code in this repo is newer than both, and files
+have since been renamed: the archives (and the two PREREGISTRATION files) use the old names, e.g. `kronos_agent/`
+for `pquant/`, `confirm.py` for `prereg_tests.py` and `configs/confirm/` for `configs/prereg1/`. The
 cross-asset study, model-size comparison, slope tests, answer shuffle and grid came later and are exploratory.
 
 ## Contributing
@@ -196,7 +198,7 @@ Every new model, asset or setting the audit runs on makes it more useful. You ca
 |---|---|---|
 | **An audit run** | your config, the `metrics.csv` and `tests.csv` it wrote, and a short provenance sheet | [`contrib/runs/`](contrib/) |
 | **Tests** | tests on made-up data that need no internet or GPU | [`tests/`](tests/) |
-| **Code** | fixes, baselines, model adapters, metrics | [`kronos_agent/`](kronos_agent/) |
+| **Code** | fixes, baselines, model adapters, metrics | [`pquant/`](pquant/) |
 
 Negative results count as much as positive ones. Commit results only, never raw prices, news or model outputs,
 and only score dates after the model's training cutoff.
@@ -210,35 +212,54 @@ Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md). Report security prob
 ## Reference
 
 <details>
-<summary><b>What each file does</b></summary>
+<summary><b>How the repo is organised</b></summary>
 
-Some file names come from the order the work was done in (`phase2`, `phase3`, `phaseb`). They are kept so
-existing notebooks and saved results keep working.
+```
+pquant/        the library: everything the scripts and notebooks import
+scripts/       one command per step (run_*.py); all resume and all take --root
+configs/       one YAML file per asset, grouped by study
+notebooks/     Colab notebooks, one per study, in run order
+tests/         47 tests, CPU only, fake models and made-up data
+docs/img/      README figures (python scripts/make_readme_figures.py redraws them)
+contrib/runs/  audit runs sent in by contributors
+```
 
-| File | What it does |
+**`pquant/`, grouped by job**
+
+| Job | File | What it does |
+|---|---|---|
+| Setup | `config.py` | loads a YAML config on top of the defaults |
+| | `data.py` | downloads and caches prices, builds the list of forecast dates |
+| | `store.py` | append-only result files that survive Colab disconnects |
+| Forecasting | `sampler.py` | Kronos: samples price paths (Kronos itself is unmodified) |
+| | `baselines.py` | Chronos, with the same interface as Kronos |
+| | `pipeline.py` | runs a model over every forecast date and saves the paths |
+| Scoring | `metrics.py` | CRPS, PIT, coverage, IC, Diebold–Mariano and standard errors |
+| | `evaluate.py` | scores Kronos against the bell-curve, bootstrap and random-walk baselines |
+| | `calibration.py` | running corrections (EMOS, ACI, conformal) that only use past outcomes |
+| | `policy.py` | trade-or-abstain rule and a backtest with costs (early work only) |
+| News and LLM | `news.py` | fetches headlines and keeps only those public in time |
+| | `llm.py` | builds the prompts and reads the LLM's probability for each answer |
+| | `news_scoring.py` | runs the LLM over every forecast date (real, anonymised, shuffled news) |
+| | `fusion.py` | blends Kronos's paths with the LLM's probabilities |
+| Studies | `calibration_report.py` | does correcting Kronos fix it? |
+| | `news_fusion_report.py` | does adding news help? |
+| | `cross_asset.py` | Kronos and Chronos across 29 assets, plus the random-walk test |
+| | `vol_artifact.py` | the volatility-scaling trap: breakdown, answer shuffle, simulation |
+| | `prereg_tests.py` | the pre-registered tests: pooled IC, placebo, Holm, permutations |
+| Output | `export.py` | packs results for the dashboard |
+
+**`configs/`**
+
+| Folder | Used by |
 |---|---|
-| `kronos_agent/sampler.py` | Kronos forecasts: samples price paths one at a time (Kronos itself is unmodified) |
-| `kronos_agent/baselines.py` | Chronos, with the same interface as Kronos |
-| `kronos_agent/pipeline.py`, `store.py` | runs forecasts over all dates and saves them; resumes after a disconnect |
-| `kronos_agent/data.py` | downloads and caches prices, builds the list of forecast dates |
-| `kronos_agent/evaluate.py` | scores Kronos against the bell-curve, bootstrap and random-walk baselines |
-| `kronos_agent/conformal.py` | running corrections (EMOS, ACI, conformal) that only use past outcomes |
-| `kronos_agent/policy.py` | trade-or-abstain rule and a backtest with costs (early work only) |
-| `kronos_agent/news.py`, `newsrun.py` | fetches news, keeps only headlines that were public in time, scores them with the LLM |
-| `kronos_agent/llm.py` | builds the prompts and reads the LLM's probabilities for each answer letter |
-| `kronos_agent/fusion.py` | blends Kronos's paths with the LLM's probabilities |
-| `kronos_agent/confirm.py` | the pre-registered tests, placebo, Holm correction, permutation tests |
-| `kronos_agent/artifact.py` | the volatility-scaling problem: breakdown, answer shuffle, simulation |
-| `kronos_agent/phase2.py` | calibration report |
-| `kronos_agent/phase3.py` | news fusion report |
-| `kronos_agent/phaseb.py` | cross-asset report and random-walk test |
-| `kronos_agent/metrics.py` | CRPS, PIT, coverage, IC, Diebold–Mariano and standard-error helpers |
-| `kronos_agent/export.py` | packs results for the dashboard |
-| `scripts/` | one command-line script per step; all resume and all take `--root` |
-| `configs/` | one YAML file per asset and study |
-| `notebooks/` | Colab notebooks, one per step |
-| `tests/` | 47 tests, CPU only, fake models and made-up data |
-| `docs/img/` | README figures (`python scripts/make_readme_figures.py` redraws them) |
+| `spy_1d.yaml`, `btc_1h.yaml` | the first Kronos and news experiments |
+| `prereg1/`, `prereg2/` | the two pre-registered tests |
+| `vol_artifact/` | the volatility-scaling study (SPY; the other 8 assets come from `prereg1/`) |
+| `cross_asset/`, `cross_asset_crypto/` | the 29-asset and ETH study |
+
+Two output folders keep their original names (`reports/phaseb/` and the `phase3_*.csv` files) so results saved
+before the rename still load.
 </details>
 
 <details>
@@ -268,7 +289,7 @@ $$
 g_t = \log P_t - \frac{1}{L}\sum_{s=t-L+1}^{t}\log P_s, \qquad \mu_t = a + b\,g_t + \varepsilon_t
 $$
 
-**Running correction** (`conformal.py`). Each sampled path is re-centred and re-scaled using only past outcomes:
+**Running correction** (`calibration.py`). Each sampled path is re-centred and re-scaled using only past outcomes:
 ridge weights over the last 250 known results, and a spread factor $k_t = \sqrt{\overline{(e/s)^2}}$.
 
 $$
@@ -281,8 +302,8 @@ $$
 \mathrm{CRPS}(F, y) = \mathbb{E}_F\lvert X - y\rvert - \tfrac{1}{2}\,\mathbb{E}_F\lvert X - X'\rvert
 $$
 
-**Pooled news test** (`confirm.py`, one-sided, Newey–West) and **slope standard errors clustered by date**
-(`phaseb.py`):
+**Pooled news test** (`prereg_tests.py`, one-sided, Newey–West) and **slope standard errors clustered by date**
+(`cross_asset.py`):
 
 $$
 d_t = \frac{1}{N_t}\sum_{i=1}^{N_t} z(\text{signal}_{it})\, z(r_{i,t+h}), \qquad

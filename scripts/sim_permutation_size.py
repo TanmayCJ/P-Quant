@@ -9,8 +9,8 @@ import time
 import numpy as np
 import pandas as pd
 
-from kronos_agent.artifact import _resid, simulate
-from kronos_agent.confirm import family_test, perm_test
+from pquant.vol_artifact import _resid, simulate
+from pquant.prereg_tests import family_test, perm_test
 
 n_panels, B = int(sys.argv[1]), int(sys.argv[2])
 rows, t0 = [], time.time()

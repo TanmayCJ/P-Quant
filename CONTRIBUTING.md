@@ -11,7 +11,7 @@ There are three ways to contribute:
 |---|---|---|
 | **Audit runs** | a config, the metrics the harness produced, and where the data came from | `contrib/runs/` |
 | **Tests** | new unit tests or regression cases for the harness | `tests/` |
-| **Code** | fixes, new baselines, new model adapters, new metrics | `kronos_agent/`, `scripts/` |
+| **Code** | fixes, new baselines, new model adapters, new metrics | `pquant/`, `scripts/` |
 
 > [!IMPORTANT]
 > Please read [Contribution terms](#contribution-terms) before opening a pull request.

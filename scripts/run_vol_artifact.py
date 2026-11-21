@@ -1,21 +1,21 @@
 """Volatility-scaling artifact report: compare the three ways of asking the LLM (CPU only).
 
-python scripts/run_artifact.py --root $ROOT --config configs/artifact/spy.yaml configs/confirm/qqq.yaml ...
-python scripts/run_artifact.py --root $ROOT --config ... --answer-shuffle 200   # + answer-shuffle placebo
-python scripts/run_artifact.py --simulate            # synthetic panels only, no data needed
-python scripts/run_artifact.py --grid --seeds 50     # false-positive rate by rebound strength x bias
+python scripts/run_vol_artifact.py --root $ROOT --config configs/vol_artifact/spy.yaml configs/prereg1/qqq.yaml ...
+python scripts/run_vol_artifact.py --root $ROOT --config ... --answer-shuffle 200   # + answer-shuffle placebo
+python scripts/run_vol_artifact.py --simulate            # synthetic panels only, no data needed
+python scripts/run_vol_artifact.py --grid --seeds 50     # false-positive rate by rebound strength x bias
 """
 import argparse
 from pathlib import Path
 
 import pandas as pd
 
-from kronos_agent.artifact import BIAS, decompose, shuffle_answers, simulate, tilt
-from kronos_agent.config import load_config
-from kronos_agent.confirm import asset_frame
-from kronos_agent.data import load_data
-from kronos_agent.newsrun import MODES, llm_dir, llm_tag
-from kronos_agent.store import ResultStore
+from pquant.vol_artifact import BIAS, decompose, shuffle_answers, simulate, tilt
+from pquant.config import load_config
+from pquant.prereg_tests import asset_frame
+from pquant.data import load_data
+from pquant.news_scoring import MODES, llm_dir, llm_tag
+from pquant.store import ResultStore
 
 
 def show(per_asset: pd.DataFrame, pooled: pd.DataFrame, title: str):

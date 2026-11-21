@@ -1,6 +1,6 @@
 """Model-size study report (CPU): does Kronos' window-mean reversion depend on model size?
 
-Run after run_phaseb.py --out modelsize with runs named <size><lookback> (base64, small256, chronos64, ...)
+Run after run_cross_asset.py --out modelsize with runs named <size><lookback> (base64, small256, chronos64, ...)
 and run_synthetic.py for each size. t/se are across assets (naive: assets share dates); t_dk/p_dk use
 Driscoll-Kraay SEs (per-date influence summed over assets, Newey-West over dates; L10/L20 = sensitivity).
 
@@ -12,8 +12,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from kronos_agent import metrics as M
-from kronos_agent.phaseb import slope_dk, slope_influence, summarize_synthetic
+from pquant import metrics as M
+from pquant.cross_asset import slope_dk, slope_influence, summarize_synthetic
 
 # chronos: comparison model (its "diff_vs_base" is Chronos minus Kronos-base)
 SIZES = {"mini": ("Kronos-mini", 4.1), "small": ("Kronos-small", 24.7), "base": ("Kronos-base", 102.3),
@@ -37,7 +37,7 @@ def main():
     f_psi = root / "reports" / args.report / "slope_psi.csv"
     psi = pd.read_csv(f_psi, parse_dates=["date"]) if f_psi.exists() else None
     if psi is None:
-        print(f"no {f_psi}: rerun run_phaseb.py for date-clustered slope SEs")
+        print(f"no {f_psi}: rerun run_cross_asset.py for date-clustered slope SEs")
 
     rows = []
     for size, (model, params) in SIZES.items():

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from kronos_agent import metrics as M
+from pquant import metrics as M
 
 
 def test_crps_point_equals_abs_error():
@@ -68,7 +68,7 @@ def test_block_bootstrap_ci_contains_mean():
 
 
 def test_config_overrides_and_tag():
-    from kronos_agent.config import load_config, run_tag
+    from pquant.config import load_config, run_tag
 
     with tempfile.TemporaryDirectory() as tmp:
         p = Path(tmp) / "c.yaml"

@@ -8,14 +8,14 @@ import yaml
 
 
 def test_export_asset_end_to_end():
-    from kronos_agent.config import load_config, run_tag
-    from kronos_agent.export import export_asset
-    from kronos_agent.newsrun import build_inputs, llm_dir, llm_tag, origins_frame, run_scoring
-    from kronos_agent.pipeline import run_sampling
-    from kronos_agent.sampler import KronosSampler
-    from kronos_agent.store import ResultStore
+    from pquant.config import load_config, run_tag
+    from pquant.export import export_asset
+    from pquant.news_scoring import build_inputs, llm_dir, llm_tag, origins_frame, run_scoring
+    from pquant.pipeline import run_sampling
+    from pquant.sampler import KronosSampler
+    from pquant.store import ResultStore
     from tests.test_pipeline import FakePredictor, synth_data
-    from tests.test_phase3 import FakeScorer
+    from tests.test_news_fusion import FakeScorer
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -61,7 +61,7 @@ def test_export_asset_end_to_end():
         json.dumps(a, allow_nan=False)
 
         # offline news read: an uncached month is skipped, never fetched (no keys in this test)
-        from kronos_agent.news import load_news
+        from pquant.news import load_news
         (nd / "2024-02.parquet").unlink()
         got = load_news(["SYN"], "2024-01-01", "2024-03-15", root / "news", key="", secret="", offline=True)
         assert len(got) and got["created_at"].dt.month.isin([1, 3]).all()

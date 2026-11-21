@@ -10,9 +10,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from kronos_agent.config import load_config
-from kronos_agent.data import COLS, load_data, origins_by_window
-from kronos_agent.sampler import KronosSampler
+from pquant.config import load_config
+from pquant.data import COLS, load_data, origins_by_window
+from pquant.sampler import KronosSampler
 
 CLOSE = COLS.index("close")
 

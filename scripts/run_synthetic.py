@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from kronos_agent.baselines import make_sampler
-from kronos_agent.config import DEFAULTS
-from kronos_agent.phaseb import run_synthetic, summarize_synthetic
+from pquant.baselines import make_sampler
+from pquant.config import DEFAULTS
+from pquant.cross_asset import run_synthetic, summarize_synthetic
 
 
 def main():

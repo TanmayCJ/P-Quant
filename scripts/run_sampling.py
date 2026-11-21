@@ -2,7 +2,7 @@
 
 python scripts/run_sampling.py --config configs/btc_1h.yaml --root /content/drive/MyDrive/kronos-agent \
     --kronos-path /content/Kronos [--limit 3] [--set amp=true --set n_paths=32]
-python scripts/run_sampling.py --config configs/kronos_b/*.yaml --set lookback=64 ...      # many assets
+python scripts/run_sampling.py --config configs/cross_asset/*.yaml --set lookback=64 ...      # many assets
 python scripts/run_sampling.py --config ... --set model_family=chronos --set model_id=amazon/chronos-t5-small --set amp=false
 """
 import argparse
@@ -10,11 +10,11 @@ import json
 import subprocess
 from pathlib import Path
 
-from kronos_agent.baselines import make_sampler
-from kronos_agent.config import load_config, run_tag
-from kronos_agent.data import load_data
-from kronos_agent.pipeline import run_sampling
-from kronos_agent.store import ResultStore
+from pquant.baselines import make_sampler
+from pquant.config import load_config, run_tag
+from pquant.data import load_data
+from pquant.pipeline import run_sampling
+from pquant.store import ResultStore
 
 
 def git_rev(path) -> str:

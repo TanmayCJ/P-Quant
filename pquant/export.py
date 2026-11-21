@@ -12,13 +12,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .conformal import emos_affine
+from .calibration import emos_affine
 from .config import load_config, run_tag
 from .data import label_period, load_data, origins_by_window
 from .evaluate import build_eval_frame
 from .news import info_time, load_news, select_headlines
-from .newsrun import llm_dir, llm_tag
-from .phaseb import asset_metrics
+from .news_scoring import llm_dir, llm_tag
+from .cross_asset import asset_metrics
 from .pipeline import decode_paths
 from .store import ResultStore
 
@@ -119,7 +119,7 @@ def export_asset(cfg_path: str, root: Path, llm_cfg_path: str | None = None, run
 def llm_config_for(asset: str, code_root: Path) -> str | None:
     """Find the LLM-study config that scored this asset with direction labels."""
     stem = asset.split("-")[0].lower()
-    for sub in ("confirm2", "confirm", "artifact"):
+    for sub in ("prereg2", "prereg1", "vol_artifact"):
         p = Path(code_root) / "configs" / sub / f"{stem}.yaml"
         if p.exists():
             return str(p)

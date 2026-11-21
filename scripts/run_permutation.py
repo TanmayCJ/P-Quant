@@ -10,12 +10,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from kronos_agent.artifact import _resid
-from kronos_agent.config import load_config
-from kronos_agent.confirm import asset_frame, family_test, perm_test
-from kronos_agent.data import load_data
-from kronos_agent.newsrun import llm_dir, llm_tag
-from kronos_agent.store import ResultStore
+from pquant.vol_artifact import _resid
+from pquant.config import load_config
+from pquant.prereg_tests import asset_frame, family_test, perm_test
+from pquant.data import load_data
+from pquant.news_scoring import llm_dir, llm_tag
+from pquant.store import ResultStore
 
 
 def main():

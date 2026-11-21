@@ -2,15 +2,15 @@ import copy
 
 import numpy as np
 
-from kronos_agent import conformal as C
-from kronos_agent import metrics as M
-from kronos_agent import policy as P
-from kronos_agent.config import DEFAULTS
-from kronos_agent.evaluate import build_eval_frame
-from kronos_agent.phase2 import phase2_report
-from kronos_agent.pipeline import run_sampling
-from kronos_agent.sampler import KronosSampler
-from kronos_agent.store import ResultStore
+from pquant import calibration as C
+from pquant import metrics as M
+from pquant import policy as P
+from pquant.config import DEFAULTS
+from pquant.evaluate import build_eval_frame
+from pquant.calibration_report import calibration_report
+from pquant.pipeline import run_sampling
+from pquant.sampler import KronosSampler
+from pquant.store import ResultStore
 
 
 def overconfident(T=1500, n=100, seed=0):
@@ -118,7 +118,7 @@ def test_risk_coverage_perfect_confidence():
     assert aurc < aurc_bad
 
 
-def test_phase2_report_end_to_end():
+def test_calibration_report_end_to_end():
     from tests.test_pipeline import CFG, FakePredictor, synth_data
     import tempfile
 
@@ -131,7 +131,7 @@ def test_phase2_report_end_to_end():
         store = ResultStore(tmp)
         run_sampling(cfg, df, KronosSampler(FakePredictor(), "fake"), store, limit=200, log=lambda *_: None)
         ev = build_eval_frame(store.load(), df, cfg["lookback"])
-    rep = phase2_report(ev, cfg, delay=6)
+    rep = calibration_report(ev, cfg, delay=6)
     c = rep["calibration"]
     assert {"raw", "recal", "spread", "emos", "emos_gap", "cqr", "aci", "emos+cqr", "emos+aci",
             "emos_gap+cqr", "emos_gap+aci"} <= set(c["method"])
@@ -145,6 +145,6 @@ def test_phase2_report_end_to_end():
     assert len(rep["decisions"]) == 200 and rep["decisions"]["scored"].sum() == 200 - 35
 
     cfg["features"] = {"conformal": False, "abstain": False}
-    rep2 = phase2_report(ev, cfg, delay=6)
+    rep2 = calibration_report(ev, cfg, delay=6)
     assert set(rep2["calibration"]["method"]) == {"raw"}
     assert set(rep2["policy"]["rule"]) == {"always", "buy_hold"}

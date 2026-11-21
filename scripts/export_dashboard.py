@@ -7,7 +7,7 @@ import json
 import time
 from pathlib import Path
 
-from kronos_agent.export import export_asset, llm_config_for
+from pquant.export import export_asset, llm_config_for
 
 CODE = Path(__file__).resolve().parents[1]
 
@@ -18,7 +18,7 @@ def main():
     args = ap.parse_args()
     root = Path(args.root)
 
-    configs = sorted((CODE / "configs" / "kronos_b").glob("*.yaml")) + [CODE / "configs" / "kronos_b_crypto" / "eth.yaml"]
+    configs = sorted((CODE / "configs" / "cross_asset").glob("*.yaml")) + [CODE / "configs" / "cross_asset_crypto" / "eth.yaml"]
     assets, t0 = [], time.time()
     for p in configs:
         import yaml

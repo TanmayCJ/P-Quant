@@ -1,17 +1,17 @@
 """Calibration report on saved Kronos paths: bias correction, intervals and the abstain policy.
 
-python scripts/run_phase2.py --config configs/btc_1h.yaml --root /content/drive/MyDrive/kronos-agent
+python scripts/run_calibration_report.py --config configs/btc_1h.yaml --root /content/drive/MyDrive/kronos-agent
 """
 import argparse
 from pathlib import Path
 
 import pandas as pd
 
-from kronos_agent.config import dm_horizon, load_config, run_tag
-from kronos_agent.data import load_data
-from kronos_agent.evaluate import build_eval_frame
-from kronos_agent.phase2 import phase2_report
-from kronos_agent.store import ResultStore
+from pquant.config import dm_horizon, load_config, run_tag
+from pquant.data import load_data
+from pquant.evaluate import build_eval_frame
+from pquant.calibration_report import calibration_report
+from pquant.store import ResultStore
 
 
 def main():
@@ -30,7 +30,7 @@ def main():
         raise SystemExit(f"no sampled paths for {tag}")
 
     ev = build_eval_frame(store_df, df, cfg["lookback"], seed=cfg["seed"])
-    rep = phase2_report(ev, cfg, delay=dm_horizon(cfg))
+    rep = calibration_report(ev, cfg, delay=dm_horizon(cfg))
     out = root / "reports" / tag
     out.mkdir(parents=True, exist_ok=True)
     for name, t in rep.items():

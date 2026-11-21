@@ -2,8 +2,10 @@
 import importlib
 import sys
 import traceback
+from pathlib import Path
 
-MODULES = ["tests.test_metrics", "tests.test_pipeline", "tests.test_phase2", "tests.test_phase3", "tests.test_confirm", "tests.test_artifact", "tests.test_phaseb", "tests.test_export"]
+# every tests/test_*.py file, so new test files are picked up without editing this list
+MODULES = sorted(f"tests.{p.stem}" for p in Path(__file__).parent.glob("test_*.py"))
 
 
 def main() -> int:

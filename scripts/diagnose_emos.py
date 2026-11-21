@@ -4,7 +4,7 @@ Compares the EMOS spread estimator ('mean_ratio' = current, 'pooled' = ratio of 
 without the gap covariate, and a location-only fit (k = 1), and reports how degenerate the
 ensembles are (share of forecasts whose sample spread is tiny relative to typical).
 
-python scripts/diagnose_emos.py --root $ROOT --config configs/kronos_b_crypto/eth.yaml \
+python scripts/diagnose_emos.py --root $ROOT --config configs/cross_asset_crypto/eth.yaml \
     --run chronos64 "lookback=64;model_family=chronos;model_id=amazon/chronos-t5-small;amp=false" \
     --run kronos64 "lookback=64"
 """
@@ -14,12 +14,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from kronos_agent import metrics as M
-from kronos_agent.conformal import emos_affine
-from kronos_agent.config import dm_horizon, load_config, run_tag
-from kronos_agent.data import label_period, load_data, origins_by_window
-from kronos_agent.evaluate import build_eval_frame
-from kronos_agent.store import ResultStore
+from pquant import metrics as M
+from pquant.calibration import emos_affine
+from pquant.config import dm_horizon, load_config, run_tag
+from pquant.data import label_period, load_data, origins_by_window
+from pquant.evaluate import build_eval_frame
+from pquant.store import ResultStore
 
 
 def main():

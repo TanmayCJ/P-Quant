@@ -4,11 +4,11 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from kronos_agent.data import COLS, origins_by_window
-from kronos_agent.evaluate import build_eval_frame, summarize
-from kronos_agent.pipeline import decode_paths, run_sampling
-from kronos_agent.sampler import KronosSampler
-from kronos_agent.store import ResultStore
+from pquant.data import COLS, origins_by_window
+from pquant.evaluate import build_eval_frame, summarize
+from pquant.pipeline import decode_paths, run_sampling
+from pquant.sampler import KronosSampler
+from pquant.store import ResultStore
 
 
 class FakePredictor:

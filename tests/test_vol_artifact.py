@@ -3,11 +3,11 @@ import copy
 import numpy as np
 import pandas as pd
 
-from kronos_agent import metrics as M
-from kronos_agent.artifact import BIAS, decompose, partial_ic, shuffle_answers, simulate, tilt
-from kronos_agent.config import DEFAULTS
-from kronos_agent.fusion import bin_edges, llm_only_samples
-from kronos_agent.newsrun import build_inputs, llm_dir, origins_frame
+from pquant import metrics as M
+from pquant.vol_artifact import BIAS, decompose, partial_ic, shuffle_answers, simulate, tilt
+from pquant.config import DEFAULTS
+from pquant.fusion import bin_edges, llm_only_samples
+from pquant.news_scoring import build_inputs, llm_dir, origins_frame
 
 
 def test_constant_answers_give_exactly_the_volatility_ic():

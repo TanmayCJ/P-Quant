@@ -4,9 +4,9 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from kronos_agent.config import DEFAULTS
-from kronos_agent.data import OHLCV
-from kronos_agent.phaseb import (asset_metrics, pooled_dm, run_synthetic, slope_dk, slope_influence,
+from pquant.config import DEFAULTS
+from pquant.data import OHLCV
+from pquant.cross_asset import (asset_metrics, pooled_dm, run_synthetic, slope_dk, slope_influence,
                                  summarize_synthetic, synthetic_series)
 
 
@@ -44,10 +44,10 @@ def test_synthetic_test_separates_reverting_from_unbiased_forecasters():
 
 
 def test_asset_metrics_and_pooled_dm_on_pipeline_output():
-    from kronos_agent.evaluate import build_eval_frame
-    from kronos_agent.pipeline import run_sampling
-    from kronos_agent.sampler import KronosSampler
-    from kronos_agent.store import ResultStore
+    from pquant.evaluate import build_eval_frame
+    from pquant.pipeline import run_sampling
+    from pquant.sampler import KronosSampler
+    from pquant.store import ResultStore
     from tests.test_pipeline import CFG, FakePredictor, synth_data
 
     df = synth_data(1500)

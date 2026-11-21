@@ -1,6 +1,6 @@
 """Cross-asset report (CPU only). Each --run is one model and lookback, given as overrides.
 
-python scripts/run_phaseb.py --root $ROOT --config configs/kronos_b/*.yaml \
+python scripts/run_cross_asset.py --root $ROOT --config configs/cross_asset/*.yaml \
     --run kronos64 "lookback=64" --run kronos256 "lookback=256" \
     --run chronos64 "lookback=64;model_family=chronos;model_id=amazon/chronos-t5-small;amp=false"
 """
@@ -10,11 +10,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from kronos_agent.config import dm_horizon, load_config, run_tag
-from kronos_agent.data import label_period, load_data, origins_by_window
-from kronos_agent.evaluate import build_eval_frame
-from kronos_agent.phaseb import asset_metrics, pooled_dm
-from kronos_agent.store import ResultStore
+from pquant.config import dm_horizon, load_config, run_tag
+from pquant.data import label_period, load_data, origins_by_window
+from pquant.evaluate import build_eval_frame
+from pquant.cross_asset import asset_metrics, pooled_dm
+from pquant.store import ResultStore
 
 
 def main():
@@ -25,7 +25,8 @@ def main():
                     help="name and ';'-separated KEY=VAL overrides")
     ap.add_argument("--k-mode", default="mean_ratio", choices=["mean_ratio", "pooled"],
                     help="EMOS spread estimator: mean_ratio (pre-specified) or pooled (robustness)")
-    ap.add_argument("--out", default="phaseb")
+    ap.add_argument("--out", default="phaseb",
+                    help="report folder under reports/ (old name kept so earlier results still load)")
     args = ap.parse_args()
     root = Path(args.root)
 

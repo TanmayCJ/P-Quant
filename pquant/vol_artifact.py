@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from . import metrics as M
-from .confirm import _one_sided
+from .prereg_tests import _one_sided
 from .fusion import bin_edges, llm_only_samples
 
 

@@ -1,18 +1,18 @@
 """News fusion report: blend the LLM's reading of the news into the forecasts (CPU only).
 
-python scripts/run_phase3.py --config configs/spy_1d.yaml --root $ROOT
+python scripts/run_news_fusion.py --config configs/spy_1d.yaml --root $ROOT
 """
 import argparse
 from pathlib import Path
 
 import pandas as pd
 
-from kronos_agent.config import dm_horizon, load_config, run_tag
-from kronos_agent.data import label_period, load_data
-from kronos_agent.evaluate import build_eval_frame
-from kronos_agent.newsrun import VARIANTS
-from kronos_agent.phase3 import phase3_report
-from kronos_agent.store import ResultStore
+from pquant.config import dm_horizon, load_config, run_tag
+from pquant.data import label_period, load_data
+from pquant.evaluate import build_eval_frame
+from pquant.news_scoring import VARIANTS
+from pquant.news_fusion_report import news_fusion_report
+from pquant.store import ResultStore
 
 
 def main():
@@ -38,7 +38,7 @@ def main():
             parts.append(d)
     if not parts:
         raise SystemExit("no LLM scores found; run scripts/run_llm.py first")
-    rep = phase3_report(ev, pd.concat(parts, ignore_index=True), cfg, dm_horizon(cfg))
+    rep = news_fusion_report(ev, pd.concat(parts, ignore_index=True), cfg, dm_horizon(cfg))
 
     out = root / "reports" / tag
     out.mkdir(parents=True, exist_ok=True)

@@ -1,19 +1,19 @@
 """Confirmation study report (PREREGISTRATION.md). CPU only; needs LLM scores from
 `run_llm.py --origins-only` for every config.
 
-python scripts/run_confirm.py --root $ROOT \
-    --equities configs/confirm/qqq.yaml ... --crypto configs/confirm/btc.yaml configs/confirm/eth.yaml
+python scripts/run_prereg_tests.py --root $ROOT \
+    --equities configs/prereg1/qqq.yaml ... --crypto configs/prereg1/btc.yaml configs/prereg1/eth.yaml
 """
 import argparse
 from pathlib import Path
 
 import pandas as pd
 
-from kronos_agent.config import load_config
-from kronos_agent.confirm import asset_frame, family_test, holm, per_asset
-from kronos_agent.data import load_data
-from kronos_agent.newsrun import VARIANTS, llm_dir, llm_tag
-from kronos_agent.store import ResultStore
+from pquant.config import load_config
+from pquant.prereg_tests import asset_frame, family_test, holm, per_asset
+from pquant.data import load_data
+from pquant.news_scoring import VARIANTS, llm_dir, llm_tag
+from pquant.store import ResultStore
 
 
 def family_frames(paths: list[str], root: Path, eval_h: int | None = None) -> tuple[pd.DataFrame, list[str]]:
