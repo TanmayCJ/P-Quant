@@ -4,6 +4,7 @@ python scripts/run_vol_artifact.py --root $ROOT --config configs/vol_artifact/sp
 python scripts/run_vol_artifact.py --root $ROOT --config ... --answer-shuffle 200   # + answer-shuffle placebo
 python scripts/run_vol_artifact.py --simulate            # synthetic panels only, no data needed
 python scripts/run_vol_artifact.py --grid --seeds 50     # false-positive rate by rebound strength x bias
+python scripts/run_vol_artifact.py --root $ROOT --config ... --start 2025-01-01   # later dates only
 """
 import argparse
 from pathlib import Path
@@ -40,6 +41,8 @@ def main():
     ap.add_argument("--answer-shuffle", type=int, default=0, metavar="B",
                     help="B permutations of the real-headline answers (keeps each date's sigma)")
     ap.add_argument("--llm-model", default=None, help="read scores of this model (default: Llama)")
+    ap.add_argument("--start", default=None, metavar="YYYY-MM-DD",
+                    help="only use forecast dates from this day on (e.g. after a model's training cutoff)")
     args = ap.parse_args()
 
     if args.grid:
@@ -67,6 +70,11 @@ def main():
             df = load_data(cfg, root / "data")
             for v in args.variants:
                 llm = ResultStore(root / "llm" / llm_dir(llm_tag(cfg), cfg, v)).load()
+                if args.start and not llm.empty:
+                    ts, start = pd.to_datetime(llm["origin_ts"]), pd.Timestamp(args.start)
+                    if ts.dt.tz is not None:
+                        start = start.tz_localize(ts.dt.tz)
+                    llm = llm[ts >= start].reset_index(drop=True)
                 if llm.empty:
                     missing.append(f"{cfg['asset']}:{mode}:{v}")
                     continue
@@ -78,8 +86,10 @@ def main():
     if not frames:
         raise SystemExit("nothing to report")
     per_asset, pooled = decompose(pd.concat(frames, ignore_index=True))
-    out = root / "reports" / ("artifact" + (f"_{args.llm_model.split('/')[-1]}" if args.llm_model else ""))
+    name = "artifact" + (f"_{args.llm_model.split('/')[-1]}" if args.llm_model else "")
+    out = root / "reports" / (name + (f"_from{args.start}" if args.start else ""))
     out.mkdir(parents=True, exist_ok=True)
+    print(f"dates per asset: {pooled['n_dates'].max()}" + (f" (from {args.start})" if args.start else ""))
     per_asset.to_csv(out / "per_asset.csv", index=False)
     pooled.to_csv(out / "pooled.csv", index=False)
     show(per_asset, pooled, "real data")
