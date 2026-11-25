@@ -79,7 +79,8 @@ def main():
                 from pquant.llm import LlamaScorer
 
                 scorer = LlamaScorer(cfg["llm"]["model_id"], token=os.environ.get("HF_TOKEN"),
-                                     max_tokens=cfg["llm"]["max_tokens"])
+                                     max_tokens=cfg["llm"]["max_tokens"],
+                                     quant_bits=int(cfg["llm"].get("quant_bits", 4)))
             run_scoring(inputs, scorer, store, variant, batch=cfg["llm"]["batch"], limit=args.limit)
 
 

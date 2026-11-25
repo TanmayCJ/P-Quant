@@ -1,6 +1,8 @@
 """Load a YAML config on top of the defaults below; command-line overrides win."""
 from __future__ import annotations
 
+import copy
+
 from pathlib import Path
 
 import yaml
@@ -33,7 +35,7 @@ DEFAULTS = {
              "lookback_hours": 48, "max_headlines": 25},
     # mode: volbins | fixbins | labels (see news_scoring.MODES); fixed_sigma: "median" or a number
     "llm": {"model_id": "meta-llama/Llama-3.1-8B-Instruct", "batch": 4, "max_tokens": 3072,
-            "mode": "volbins", "fixed_sigma": "median"},
+            "mode": "volbins", "fixed_sigma": "median", "quant_bits": 4},
     # negative lambda = contrarian pooling (bet against the LLM's reading), chosen online like the rest
     "fusion": {"grid": [-2.0, -1.5, -1.0, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0],
                "priors": ["kronos_raw", "kronos_emos_gap", "gauss_raw"]},
@@ -63,7 +65,7 @@ def _apply_override(cfg: dict, item: str) -> None:
 
 def load_config(path: str | Path, overrides: list[str] | None = None) -> dict:
     with open(path) as f:
-        cfg = _merge(DEFAULTS, yaml.safe_load(f))
+        cfg = _merge(copy.deepcopy(DEFAULTS), yaml.safe_load(f))  # overrides must not leak into DEFAULTS
     for item in overrides or []:
         _apply_override(cfg, item)
     missing = [k for k in REQUIRED if k not in cfg]

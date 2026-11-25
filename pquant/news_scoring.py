@@ -96,7 +96,9 @@ def llm_dir(tag: str, cfg: dict, variant: str) -> str:
     mode = cfg["llm"].get("mode", "volbins")
     name = f"{tag}_{variant}" if mode == "volbins" else f"{tag}_{mode}_{variant}"
     model = cfg["llm"].get("model_id", DEFAULT_LLM)
-    return name if model == DEFAULT_LLM else f"{name}_{model.split('/')[-1]}"
+    name = name if model == DEFAULT_LLM else f"{name}_{model.split('/')[-1]}"
+    bits = int(cfg["llm"].get("quant_bits", 4))
+    return name if bits == 4 else f"{name}_{bits}bit"  # 4-bit is the default; others kept apart
 
 
 def run_scoring(inputs: list[dict], scorer, store: ResultStore, variant: str, batch: int = 4,

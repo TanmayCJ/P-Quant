@@ -71,6 +71,8 @@ def main():
     ap.add_argument("--answer-shuffle", type=int, default=0, metavar="B",
                     help="B permutations of the real-headline answers (keeps each date's sigma)")
     ap.add_argument("--llm-model", default=None, help="read scores of this model (default: Llama)")
+    ap.add_argument("--quant-bits", type=int, default=4, choices=(4, 8, 16),
+                    help="read scores made at this precision (default 4-bit)")
     ap.add_argument("--start", default=None, metavar="YYYY-MM-DD",
                     help="only use forecast dates from this day on (e.g. after a model's training cutoff)")
     ap.add_argument("--events", action="store_true",
@@ -113,7 +115,8 @@ def main():
     frames, missing, real_inputs, rev_done = [], [], [], set()
     for p in args.config:
         for mode in args.modes:
-            cfg = load_config(p, [f"llm.mode={mode}"] + ([f"llm.model_id={args.llm_model}"] if args.llm_model else []))
+            cfg = load_config(p, [f"llm.mode={mode}", f"llm.quant_bits={args.quant_bits}"]
+                              + ([f"llm.model_id={args.llm_model}"] if args.llm_model else []))
             df = load_data(cfg, root / "data")
             for v in args.variants:
                 llm = ResultStore(root / "llm" / llm_dir(llm_tag(cfg), cfg, v)).load()
@@ -140,6 +143,7 @@ def main():
     frames = pd.concat(frames, ignore_index=True)
     per_asset, pooled = decompose(frames, controls)
     name = "artifact" + (f"_{args.llm_model.split('/')[-1]}" if args.llm_model else "")
+    name += f"_{args.quant_bits}bit" if args.quant_bits != 4 else ""
     name += (f"_from{args.start}" if args.start else "") + (f"_controls-{'-'.join(ctrl)}" if ctrl else "")
     name += f"_{args.tag}" if args.tag else ""
     out = root / "reports" / name

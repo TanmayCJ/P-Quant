@@ -86,6 +86,8 @@ def test_modes_build_the_right_prompts():
     assert lab[0]["letters"] == "ABC" and "A: up" in lab[0]["messages"][1]["content"]
     cfg["llm"] = {**cfg["llm"], "mode": "volbins"}
     assert llm_dir("T", cfg, "real") == "T_real"                          # old runs stay valid
+    cfg["llm"] = {**cfg["llm"], "quant_bits": 8}
+    assert llm_dir("T", cfg, "real") == "T_real_8bit"                     # 8-bit kept apart from 4-bit
 
 
 def test_past_return_ends_before_forecast_window():
@@ -157,3 +159,9 @@ def test_lean_table_predicts_ic_in_simulation():
     lt = lean_table(f[(f["mode"] == "volbins") & (f["variant"] == "real")])
     assert abs(lt["ic_predicted"].mean() - lt["ic_observed"].mean()) < 0.03
     assert (abs(lt["L_formula"] - lt["L_measured"]) < 0.1).all()
+
+
+def test_config_overrides_do_not_leak_between_loads():
+    from pquant.config import load_config
+    assert load_config("configs/vol_artifact/spy.yaml", ["llm.quant_bits=8"])["llm"]["quant_bits"] == 8
+    assert load_config("configs/vol_artifact/spy.yaml")["llm"]["quant_bits"] == 4

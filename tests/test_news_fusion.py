@@ -200,3 +200,17 @@ def test_debias_q_removes_standing_bias_causally():
     Q2[300:] = np.roll(Q2[300:], 1, axis=1)
     a, b = F.debias_q(Q), F.debias_q(Q2)
     assert np.array_equal(a[:300], b[:300]) and not np.array_equal(a[301], b[301])
+
+
+def test_render_turns_off_thinking_and_keeps_answer_cue():
+    from pquant.llm import LlamaScorer
+
+    class Tok:
+        def apply_chat_template(self, messages, tokenize, add_generation_prompt, **kw):
+            self.kw = kw
+            return "<prompt>"
+
+    s = LlamaScorer.__new__(LlamaScorer)
+    s.tok = Tok()
+    assert s.render([{"role": "user", "content": "x"}]) == "<prompt>Answer:"
+    assert s.tok.kw == {"enable_thinking": False}

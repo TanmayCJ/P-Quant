@@ -79,10 +79,11 @@ def build_label_messages(asset_name: str, horizon_text: str, cutoff: pd.Timestam
 
 
 class LlamaScorer:
-    """4-bit Llama-3.1-8B-Instruct; returns softmax over the letter tokens A..G."""
+    """Llama-3.1-8B-Instruct (or another chat model), 4-bit by default; returns softmax over the
+    letter tokens A..G. quant_bits: 4 (NF4), 8 (LLM.int8) or 16 (fp16, no quantization)."""
 
     def __init__(self, model_id: str = "meta-llama/Llama-3.1-8B-Instruct", token: str | None = None,
-                 max_tokens: int = 3072):
+                 max_tokens: int = 3072, quant_bits: int = 4):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
@@ -91,14 +92,37 @@ class LlamaScorer:
         self.tok.pad_token = self.tok.pad_token or self.tok.eos_token
         self.tok.padding_side = "left"
         self.tok.truncation_side = "left"  # never cut the question/answer cue at the end
-        q = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
-                               bnb_4bit_compute_dtype=torch.float16)
-        self.model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=q,
-                                                          device_map="auto", token=token)
+        if quant_bits == 4:
+            q = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                                   bnb_4bit_compute_dtype=torch.float16)
+        elif quant_bits == 8:
+            q = BitsAndBytesConfig(load_in_8bit=True)
+        elif quant_bits == 16:
+            q = None
+        else:
+            raise ValueError(f"quant_bits must be 4, 8 or 16, got {quant_bits}")
+        self.model = self._load(model_id, q, token, AutoModelForCausalLM)
         self.model.eval()
         self.max_tokens = max_tokens
         self._ids: dict[str, list[int]] = {}
         self.letter_ids = self.ids_for(LETTERS)
+
+    @staticmethod
+    def _load(model_id, q, token, causal_cls):
+        """Text-only models load as causal LMs; newer multimodal ones (e.g. Qwen3.5, Gemma 4) need
+        their image-text class, used here with text input only."""
+        import transformers
+        classes = [causal_cls] + [getattr(transformers, n) for n in
+                                  ("AutoModelForImageTextToText", "AutoModelForMultimodalLM")
+                                  if hasattr(transformers, n)]
+        err = None
+        for cls in classes:
+            try:
+                kw = {"quantization_config": q} if q is not None else {"torch_dtype": "float16"}
+                return cls.from_pretrained(model_id, device_map="auto", token=token, **kw)
+            except (ValueError, KeyError) as e:  # architecture not registered for this auto class
+                err = e
+        raise err
 
     def ids_for(self, letters: str) -> list[int]:
         if letters not in self._ids:
@@ -112,7 +136,10 @@ class LlamaScorer:
         return self._ids[letters]
 
     def render(self, messages: list[dict]) -> str:
-        return self.tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True) + "Answer:"
+        # enable_thinking=False: models with a reasoning mode (Qwen3/3.5) answer directly; templates
+        # without that switch (Llama 3.1, Qwen2.5) ignore it, so their prompts are unchanged.
+        return self.tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True,
+                                            enable_thinking=False) + "Answer:"
 
     def n_tokens(self, prompt: str) -> int:
         return len(self.tok.encode(prompt, add_special_tokens=False))
