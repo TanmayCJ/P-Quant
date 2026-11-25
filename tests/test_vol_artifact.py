@@ -5,7 +5,8 @@ import pandas as pd
 
 from pquant import metrics as M
 from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, partial_ic, past_return,
-                                 pooled_series, shock_dates, shuffle_answers, simulate, tilt)
+                                 pooled_series, shock_dates, shuffle_answers, simulate, tilt,
+                                 false_alarm_rate, leak_factor, lean_table)
 from pquant.config import DEFAULTS
 from pquant.fusion import bin_edges, llm_only_samples
 from pquant.news_scoring import build_inputs, llm_dir, origins_frame
@@ -140,3 +141,19 @@ def test_shock_and_event_dates():
     assert 10 <= len(d) <= 14
     ev = event_dates(pd.date_range("2024-07-07", periods=60, freq="W"))
     assert len(ev["yen_carry_2024-08"]) in (1, 2) and len(ev["tariffs_2025-04"]) in (1, 2)
+
+
+def test_leak_factor_matches_measured_correlation():
+    rng = np.random.default_rng(3)
+    sigma = 0.02 * np.exp(rng.normal(0, 0.4, 200000))
+    m = rng.normal(-0.4, 0.5, 200000)                       # steady bearish lean, lam = -0.8
+    lam, c = m.mean() / m.std(), sigma.std() / sigma.mean()
+    assert abs(float(leak_factor(lam, c)) - np.corrcoef(sigma * m, sigma)[0, 1]) < 0.01
+    assert leak_factor(0.0, 0.5) == 0 and abs(false_alarm_rate(0.0) - 0.05) < 1e-3
+
+
+def test_lean_table_predicts_ic_in_simulation():
+    f = simulate(info=0.0, seed=8, T=3000, kappa=0.5)
+    lt = lean_table(f[(f["mode"] == "volbins") & (f["variant"] == "real")])
+    assert abs(lt["ic_predicted"].mean() - lt["ic_observed"].mean()) < 0.03
+    assert (abs(lt["L_formula"] - lt["L_measured"]) < 0.1).all()

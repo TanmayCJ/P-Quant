@@ -8,6 +8,8 @@ python scripts/run_vol_artifact.py --root $ROOT --config ... --start 2025-01-01 
 python scripts/run_vol_artifact.py --root $ROOT --config ... --modes labels --controls ret1w ret4w [--tag prereg2]
     # also partial out past returns (short-term reversal check) and test reversal on its own
 python scripts/run_vol_artifact.py --root $ROOT --config ... --events   # volatility-shock weeks
+python scripts/run_vol_artifact.py --root $ROOT --config ... --modes volbins --lean   # predict the fake signal
+python scripts/run_vol_artifact.py --grid-predict    # formula vs simulation grid (no data needed)
 """
 import argparse
 from pathlib import Path
@@ -16,7 +18,8 @@ import numpy as np
 import pandas as pd
 
 from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, past_return, pooled_series,
-                                  shock_dates, shuffle_answers, simulate, tilt, vol_rank)
+                                  shock_dates, shuffle_answers, simulate, tilt, vol_rank,
+                                  grid_predict, lean_table, predict_pooled)
 from pquant.config import load_config
 from pquant.prereg_tests import asset_frame
 from pquant.data import load_data
@@ -73,11 +76,21 @@ def main():
     ap.add_argument("--events", action="store_true",
                     help="does the result live in volatility-shock weeks? (drop them vs random weeks)")
     ap.add_argument("--shock-quantile", type=float, default=0.9)
+    ap.add_argument("--lean", action="store_true", help="predict the fake signal from the answers' lean")
+    ap.add_argument("--grid-predict", action="store_true", help="formula's false-alarm rate per grid cell")
     ap.add_argument("--tag", default=None, help="suffix for the output folder (keeps runs on other assets apart)")
     ap.add_argument("--controls", nargs="*", default=[], choices=list(CONTROL_HORIZONS),
                     help="also partial out past returns; adds a reversal-only pseudo-mode")
     args = ap.parse_args()
 
+    if args.grid_predict:
+        res = grid_predict()
+        Path("reports/artifact").mkdir(parents=True, exist_ok=True)
+        res.to_csv("reports/artifact/grid_predict.csv", index=False)
+        print("== formula: predicted false-alarm rate, volbins, rows kappa, cols alpha ==")
+        print(res.pivot(index="kappa", columns="alpha", values="false_alarm_predicted").round(2).to_string())
+        if not args.config and not args.grid:
+            return
     if args.grid:
         grid(args.seeds)
         if not args.config:
@@ -135,6 +148,8 @@ def main():
     per_asset.to_csv(out / "per_asset.csv", index=False)
     pooled.to_csv(out / "pooled.csv", index=False)
     show(per_asset, pooled, "real data")
+    if args.lean:
+        lean(frames, pooled, out)
     if args.events:
         events(frames, controls, args.shock_quantile, out)
     if args.answer_shuffle:
@@ -218,6 +233,23 @@ def events(frames: pd.DataFrame, controls: dict, q: float, out: Path, B: int = 1
     fig.tight_layout()
     fig.savefig(out / "events.png", dpi=150)
     print(f"plot: {out / 'events.png'}")
+
+
+def lean(frames: pd.DataFrame, pooled: pd.DataFrame, out: Path):
+    """Formula check on real data: predicted vs observed fake signal for volatility-scaled boxes."""
+    f = frames[frames["mode"] == "volbins"]
+    if f.empty:
+        print("--lean needs volbins scores")
+        return
+    lt, pp = lean_table(f), predict_pooled(f, pooled)
+    lt.to_csv(out / "lean_per_asset.csv", index=False)
+    pp.to_csv(out / "lean.csv", index=False)
+    with pd.option_context("display.width", 200, "display.precision", 3):
+        print("\n== lean formula, per asset (volbins) ==")
+        print(lt.to_string(index=False))
+        print("\n== lean formula, pooled: predicted vs observed ==")
+        print(pp.to_string(index=False))
+        print("Compare t_predicted with the answer-shuffle placebo's mean t (the uninformative benchmark).")
 
 
 def grid(seeds: int):

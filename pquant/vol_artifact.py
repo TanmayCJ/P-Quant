@@ -225,3 +225,76 @@ def drop_test(s: pd.Series, drop, B: int = 1000, seed: int = 0) -> dict:
     return {"n_dates": len(x), "n_dropped": k, "t_all": t_all, "t_kept": t_kept,
             "share_of_sum": float(x[mask].sum() / x.sum()) if x.sum() else float("nan"),
             "t_random_mean": float(rand.mean()), "p_random": float((rand >= t_kept).mean())}
+
+
+# --- predicting the false alarm from the answers ---------------------------------------------
+
+def leak_factor(lam, c):
+    """corr(sigma * m, sigma) for m independent of sigma, from the lean ratio lam = mean(m)/sd(m)
+    and sigma's coefficient of variation c. The fake IC is this times corr(sigma, r)."""
+    lam, c = np.asarray(lam, float), np.asarray(c, float)
+    return lam * c / np.sqrt(1 + c ** 2 + (lam * c) ** 2)
+
+
+def false_alarm_rate(t_expected, z: float = 1.645):
+    """P(one-sided test rejects) when the t statistic is about N(t_expected, 1)."""
+    from math import erf, sqrt
+    return 0.5 * (1 + erf((-z - float(t_expected)) / sqrt(2)))
+
+
+def lean_table(frames: pd.DataFrame) -> pd.DataFrame:
+    """Per (mode, variant, asset): lean ratio, sigma variability, leak factor (formula and measured),
+    corr(sigma, r), predicted and observed IC. Only meaningful for volatility-scaled boxes."""
+    rows = []
+    for (mode, variant, asset), g in frames.groupby(["mode", "variant", "asset"]):
+        e, v, r = g["eq"].to_numpy(float), g["sigma"].to_numpy(float), g["r"].to_numpy(float)
+        m = e / v
+        lam, c = m.mean() / m.std(), v.std() / v.mean()
+        L, rho = float(leak_factor(lam, c)), M.ic(v, r)
+        rows.append({"mode": mode, "variant": variant, "asset": asset, "lean_ratio": lam, "sigma_cv": c,
+                     "L_formula": L, "L_measured": M.ic(e, v), "corr_sigma_r": rho,
+                     "ic_predicted": L * rho, "ic_observed": M.ic(e, r)})
+    return pd.DataFrame(rows)
+
+
+def predict_pooled(frames: pd.DataFrame, pooled: pd.DataFrame) -> pd.DataFrame:
+    """Predicted pooled t and false-alarm rate per (mode, variant). The standard error is taken from
+    the observed test (mean_d / t), so only the size of the effect is predicted."""
+    lt = lean_table(frames)
+    obs = pooled[pooled["signal"] == "raw"].set_index(["mode", "variant"])
+    rows = []
+    for (mode, variant), g in lt.groupby(["mode", "variant"]):
+        o = obs.loc[(mode, variant)]
+        se = o["mean_d"] / o["t"]
+        t_pred = g["ic_predicted"].mean() / se
+        rows.append({"mode": mode, "variant": variant, "lean_ratio": g["lean_ratio"].mean(),
+                     "L_formula": g["L_formula"].mean(), "L_measured": g["L_measured"].mean(),
+                     "corr_sigma_r": g["corr_sigma_r"].mean(), "ic_predicted": g["ic_predicted"].mean(),
+                     "ic_observed": g["ic_observed"].mean(), "t_predicted": t_pred, "t_observed": o["t"],
+                     "false_alarm_predicted": false_alarm_rate(t_pred)})
+    return pd.DataFrame(rows)
+
+
+def grid_predict(kappas=(0.0, 0.1, 0.25, 0.5), alphas=(0.0, 0.5, 1.0, 1.5), T: int = 400,
+                 n_assets: int = 9, panels: int = 50, seed: int = 10000) -> pd.DataFrame:
+    """Predicted false-alarm rate of volatility-scaled boxes for each grid cell: the formula's
+    ingredients (fake IC = L * corr(sigma, r), and the per-date spread) are averaged over panels of
+    the test's own length T. (Plugging in values from one very long panel underpredicts: rare extreme
+    volatility spikes inflate the spread there.)"""
+    rows = []
+    for kappa in kappas:
+        for alpha in alphas:
+            ics, sds, lams, Ls, rhos = [], [], [], [], []
+            for i in range(panels):
+                f = simulate(n_assets=n_assets, T=T, kappa=kappa, bias=tilt(BIAS, alpha), seed=seed + i)
+                f = f[(f["mode"] == "volbins") & (f["variant"] == "real")]
+                lt = lean_table(f)
+                ics.append(lt["ic_predicted"].mean())
+                sds.append(pooled_series(f)[("volbins", "real", "raw")].std())
+                lams.append(lt["lean_ratio"].mean()); Ls.append(lt["L_formula"].mean())
+                rhos.append(lt["corr_sigma_r"].mean())
+            t_exp = np.mean(ics) / np.mean(sds) * np.sqrt(T)
+            rows.append({"kappa": kappa, "alpha": alpha, "lean_ratio": np.mean(lams), "L_formula": np.mean(Ls),
+                         "corr_sigma_r": np.mean(rhos), "t_expected": t_exp,
+                         "false_alarm_predicted": false_alarm_rate(t_exp)})
+    return pd.DataFrame(rows)
