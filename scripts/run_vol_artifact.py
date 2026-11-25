@@ -5,7 +5,7 @@ python scripts/run_vol_artifact.py --root $ROOT --config ... --answer-shuffle 20
 python scripts/run_vol_artifact.py --simulate            # synthetic panels only, no data needed
 python scripts/run_vol_artifact.py --grid --seeds 50     # false-positive rate by rebound strength x bias
 python scripts/run_vol_artifact.py --root $ROOT --config ... --start 2025-01-01   # later dates only
-python scripts/run_vol_artifact.py --root $ROOT --config ... --modes labels --controls ret1w ret4w
+python scripts/run_vol_artifact.py --root $ROOT --config ... --modes labels --controls ret1w ret4w [--tag prereg2]
     # also partial out past returns (short-term reversal check) and test reversal on its own
 """
 import argparse
@@ -67,6 +67,7 @@ def main():
     ap.add_argument("--llm-model", default=None, help="read scores of this model (default: Llama)")
     ap.add_argument("--start", default=None, metavar="YYYY-MM-DD",
                     help="only use forecast dates from this day on (e.g. after a model's training cutoff)")
+    ap.add_argument("--tag", default=None, help="suffix for the output folder (keeps runs on other assets apart)")
     ap.add_argument("--controls", nargs="*", default=[], choices=list(CONTROL_HORIZONS),
                     help="also partial out past returns; adds a reversal-only pseudo-mode")
     args = ap.parse_args()
@@ -120,6 +121,7 @@ def main():
     per_asset, pooled = decompose(pd.concat(frames, ignore_index=True), controls)
     name = "artifact" + (f"_{args.llm_model.split('/')[-1]}" if args.llm_model else "")
     name += (f"_from{args.start}" if args.start else "") + (f"_controls-{'-'.join(ctrl)}" if ctrl else "")
+    name += f"_{args.tag}" if args.tag else ""
     out = root / "reports" / name
     out.mkdir(parents=True, exist_ok=True)
     print(f"dates per asset: {pooled['n_dates'].max()}" + (f" (from {args.start})" if args.start else ""))
