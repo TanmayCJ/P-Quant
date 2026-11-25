@@ -5,26 +5,50 @@ python scripts/run_vol_artifact.py --root $ROOT --config ... --answer-shuffle 20
 python scripts/run_vol_artifact.py --simulate            # synthetic panels only, no data needed
 python scripts/run_vol_artifact.py --grid --seeds 50     # false-positive rate by rebound strength x bias
 python scripts/run_vol_artifact.py --root $ROOT --config ... --start 2025-01-01   # later dates only
+python scripts/run_vol_artifact.py --root $ROOT --config ... --modes labels --controls ret1w ret4w
+    # also partial out past returns (short-term reversal check) and test reversal on its own
 """
 import argparse
 from pathlib import Path
 
 import pandas as pd
 
-from pquant.vol_artifact import BIAS, decompose, shuffle_answers, simulate, tilt
+from pquant.vol_artifact import BIAS, decompose, past_return, shuffle_answers, simulate, tilt
 from pquant.config import load_config
 from pquant.prereg_tests import asset_frame
 from pquant.data import load_data
 from pquant.news_scoring import MODES, llm_dir, llm_tag
 from pquant.store import ResultStore
 
+CONTROL_HORIZONS = {"ret1w": 1, "ret4w": 4}  # past return over this many forecast horizons
+
+
+def controls_for(ctrl: list[str]) -> dict:
+    out = {"partial_sigma": ["sigma"]}
+    for c in ctrl:
+        out[f"partial_{c}"] = [c]
+        out[f"partial_sigma_{c}"] = ["sigma", c]
+    if len(ctrl) > 1:
+        out["partial_all"] = ["sigma", *ctrl]
+    return out
+
+
+def build(cfg, df, llm, variant, mode, ctrl):
+    """asset_frame plus the requested past-return columns (rows without enough history dropped)."""
+    fr = asset_frame(cfg, df, llm.assign(variant=variant)).assign(mode=mode)
+    h = int(cfg["pred_len"])
+    for c in ctrl:
+        fr[c] = past_return(df, fr["origin_ts"], CONTROL_HORIZONS[c] * h)
+    return fr.dropna(subset=ctrl).reset_index(drop=True) if ctrl else fr
+
 
 def show(per_asset: pd.DataFrame, pooled: pd.DataFrame, title: str):
     with pd.option_context("display.width", 200, "display.max_columns", 20, "display.precision", 4):
         print(f"== {title}: pooled Fama-MacBeth (signal=raw vs partial_sigma = volatility removed) ==")
         print(pooled.sort_values(["mode", "variant", "signal"]).to_string(index=False))
-        summ = per_asset.groupby(["mode", "variant"])[["ic", "ic_partial_sigma", "ic_neg_sigma",
-                                                        "corr_signal_sigma"]].mean()
+        cols = ["ic", "ic_partial_sigma", "ic_neg_sigma", "corr_signal_sigma"]
+        cols += [c for c in per_asset.columns if c not in cols and c.startswith(("ic_", "corr_signal_"))]
+        summ = per_asset.groupby(["mode", "variant"])[cols].mean()
         print(f"\n== {title}: mean across assets ==")
         print(summ.to_string())
 
@@ -43,6 +67,8 @@ def main():
     ap.add_argument("--llm-model", default=None, help="read scores of this model (default: Llama)")
     ap.add_argument("--start", default=None, metavar="YYYY-MM-DD",
                     help="only use forecast dates from this day on (e.g. after a model's training cutoff)")
+    ap.add_argument("--controls", nargs="*", default=[], choices=list(CONTROL_HORIZONS),
+                    help="also partial out past returns; adds a reversal-only pseudo-mode")
     args = ap.parse_args()
 
     if args.grid:
@@ -63,7 +89,8 @@ def main():
             return
 
     root = Path(args.root)
-    frames, missing, real_inputs = [], [], []
+    ctrl, controls = args.controls, controls_for(args.controls)
+    frames, missing, real_inputs, rev_done = [], [], [], set()
     for p in args.config:
         for mode in args.modes:
             cfg = load_config(p, [f"llm.mode={mode}"] + ([f"llm.model_id={args.llm_model}"] if args.llm_model else []))
@@ -78,33 +105,39 @@ def main():
                 if llm.empty:
                     missing.append(f"{cfg['asset']}:{mode}:{v}")
                     continue
-                frames.append(asset_frame(cfg, df, llm.assign(variant=v)).assign(mode=mode))
+                fr = build(cfg, df, llm, v, mode, ctrl)
+                frames.append(fr)
                 if v == "real":
                     real_inputs.append((cfg, df, llm, mode))
+                    if ctrl and cfg["asset"] not in rev_done:  # reversal alone: signal = -past return
+                        rev_done.add(cfg["asset"])
+                        for c in ctrl:
+                            frames.append(fr.assign(mode=f"reversal_{c}", eq=-fr[c]))
     if missing:
         print("missing LLM scores:", ", ".join(missing))
     if not frames:
         raise SystemExit("nothing to report")
-    per_asset, pooled = decompose(pd.concat(frames, ignore_index=True))
+    per_asset, pooled = decompose(pd.concat(frames, ignore_index=True), controls)
     name = "artifact" + (f"_{args.llm_model.split('/')[-1]}" if args.llm_model else "")
-    out = root / "reports" / (name + (f"_from{args.start}" if args.start else ""))
+    name += (f"_from{args.start}" if args.start else "") + (f"_controls-{'-'.join(ctrl)}" if ctrl else "")
+    out = root / "reports" / name
     out.mkdir(parents=True, exist_ok=True)
     print(f"dates per asset: {pooled['n_dates'].max()}" + (f" (from {args.start})" if args.start else ""))
     per_asset.to_csv(out / "per_asset.csv", index=False)
     pooled.to_csv(out / "pooled.csv", index=False)
     show(per_asset, pooled, "real data")
     if args.answer_shuffle:
-        answer_shuffle(real_inputs, args.answer_shuffle, pooled, out)
+        answer_shuffle(real_inputs, args.answer_shuffle, pooled, out, ctrl, controls)
     print(f"\nwrote {out}")
 
 
-def answer_shuffle(real_inputs, B: int, pooled: pd.DataFrame, out: Path):
+def answer_shuffle(real_inputs, B: int, pooled: pd.DataFrame, out: Path, ctrl=(), controls=None):
     """Pooled test on B answer-shuffled panels; compares each mode's real t with the placebo's."""
     draws = []
     for b in range(B):
-        fr = [asset_frame(cfg, df, shuffle_answers(llm, seed=b * 1000 + i).assign(variant="answer_shuffled"))
-              .assign(mode=mode) for i, (cfg, df, llm, mode) in enumerate(real_inputs)]
-        draws.append(decompose(pd.concat(fr, ignore_index=True))[1].assign(draw=b))
+        fr = [build(cfg, df, shuffle_answers(llm, seed=b * 1000 + i), "answer_shuffled", mode, list(ctrl))
+              for i, (cfg, df, llm, mode) in enumerate(real_inputs)]
+        draws.append(decompose(pd.concat(fr, ignore_index=True), controls)[1].assign(draw=b))
     sh = pd.concat(draws, ignore_index=True)
     sh.to_csv(out / "answer_shuffle_draws.csv", index=False)
     real = pooled[pooled["variant"] == "real"].set_index(["mode", "signal"])["t"]

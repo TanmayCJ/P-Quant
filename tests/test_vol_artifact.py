@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from pquant import metrics as M
-from pquant.vol_artifact import BIAS, decompose, partial_ic, shuffle_answers, simulate, tilt
+from pquant.vol_artifact import BIAS, decompose, partial_ic, past_return, shuffle_answers, simulate, tilt
 from pquant.config import DEFAULTS
 from pquant.fusion import bin_edges, llm_only_samples
 from pquant.news_scoring import build_inputs, llm_dir, origins_frame
@@ -84,3 +84,31 @@ def test_modes_build_the_right_prompts():
     assert lab[0]["letters"] == "ABC" and "A: up" in lab[0]["messages"][1]["content"]
     cfg["llm"] = {**cfg["llm"], "mode": "volbins"}
     assert llm_dir("T", cfg, "real") == "T_real"                          # old runs stay valid
+
+
+def test_past_return_ends_before_forecast_window():
+    idx = pd.date_range("2024-01-01", periods=30, freq="D")
+    df = pd.DataFrame({"close": np.exp(0.01 * np.arange(30))}, index=idx)
+    pr = past_return(df, idx[[3, 10, 20]], h=5)
+    assert np.isnan(pr[0])                                   # not enough history
+    assert np.allclose(pr[1:], 0.05)                         # close[i-1] / close[i-6]
+
+
+def test_decompose_partials_out_extra_control():
+    rng = np.random.default_rng(7)
+    rows = []
+    for a in range(6):
+        T = 300
+        x = rng.normal(size=T)                               # e.g. last week's return
+        r = -0.4 * x + rng.normal(size=T)                    # reversal
+        eq = x + 0.3 * rng.normal(size=T)                    # signal that only echoes x
+        rows.append(pd.DataFrame({"asset": f"S{a}", "mode": "labels", "variant": "real",
+                                  "date": pd.date_range("2020-01-05", periods=T, freq="W"),
+                                  "eq": eq, "sigma": np.exp(rng.normal(size=T)), "r": r, "x": x}))
+    f = pd.concat(rows, ignore_index=True)
+    _, default = decompose(f)
+    assert set(default["signal"]) == {"raw", "partial_sigma"}
+    per, pooled = decompose(f, {"partial_sigma": ["sigma"], "partial_x": ["x"]})
+    t = pooled.set_index("signal")["t"]
+    assert t["raw"] < -5 and abs(t["partial_x"]) < 3
+    assert (per["corr_signal_x"] > 0.8).all() and "ic_partial_x" in per

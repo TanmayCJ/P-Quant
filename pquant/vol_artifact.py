@@ -47,24 +47,49 @@ def _zprod(x, y):
 
 
 def _resid(s, v):
-    X = np.column_stack([np.ones_like(v), v])
+    """Residual of s ~ 1 + v (v: one column or a 2-D array of controls)."""
+    v = np.asarray(v, float)
+    X = np.column_stack([np.ones(len(s)), v.reshape(len(s), -1)])
     beta, *_ = np.linalg.lstsq(X, s, rcond=None)
     return s - X @ beta
 
 
-def decompose(frames: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """frames: asset, mode, variant, date, eq, sigma, r. Returns (per-asset, pooled) tables."""
+def past_return(df: pd.DataFrame, origin_ts, h: int) -> np.ndarray:
+    """Log return over the h bars before each origin (ending at the last close before the forecast
+    window, the same close the realized return starts from). NaN where history is too short."""
+    close = df["close"].to_numpy(float)
+    idx = df.index.get_indexer(pd.to_datetime(origin_ts))
+    out = np.full(len(idx), np.nan)
+    ok = idx - 1 - h >= 0
+    out[ok] = np.log(close[idx[ok] - 1] / close[idx[ok] - 1 - h])
+    return out
+
+
+def decompose(frames: pd.DataFrame, controls: dict | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """frames: asset, mode, variant, date, eq, sigma, r (+ any control columns).
+    controls: {signal label: [columns to partial out]}; default {"partial_sigma": ["sigma"]}.
+    Returns (per-asset, pooled) tables."""
+    controls = controls or {"partial_sigma": ["sigma"]}
+    extra = sorted({c for cols in controls.values() for c in cols} - {"sigma"})
     rows, pooled = [], []
     for (mode, variant), f in frames.groupby(["mode", "variant"]):
-        per_date_raw, per_date_part = [], []
+        per_date = {label: [] for label in ["raw", *controls]}
         for asset, g in f.groupby("asset"):
             e, v, r = g["eq"].to_numpy(float), g["sigma"].to_numpy(float), g["r"].to_numpy(float)
-            rows.append({"mode": mode, "variant": variant, "asset": asset, "n": len(g),
-                         "ic": M.ic(e, r), "ic_partial_sigma": partial_ic(e, r, v),
-                         "ic_neg_sigma": M.ic(-v, r), "corr_signal_sigma": M.ic(e, v)})
-            per_date_raw.append(pd.Series(_zprod(e, r), index=g["date"].to_numpy()))
-            per_date_part.append(pd.Series(_zprod(_resid(e, v), r), index=g["date"].to_numpy()))
-        for label, parts in (("raw", per_date_raw), ("partial_sigma", per_date_part)):
+            row = {"mode": mode, "variant": variant, "asset": asset, "n": len(g),
+                   "ic": M.ic(e, r), "ic_partial_sigma": partial_ic(e, r, v),
+                   "ic_neg_sigma": M.ic(-v, r), "corr_signal_sigma": M.ic(e, v)}
+            for c in extra:
+                row[f"corr_signal_{c}"] = M.ic(e, g[c].to_numpy(float))
+            dates = g["date"].to_numpy()
+            per_date["raw"].append(pd.Series(_zprod(e, r), index=dates))
+            for label, cols in controls.items():
+                res = _resid(e, g[cols].to_numpy(float))
+                if label != "partial_sigma":
+                    row[f"ic_{label}"] = M.ic(res, r)
+                per_date[label].append(pd.Series(_zprod(res, r), index=dates))
+            rows.append(row)
+        for label, parts in per_date.items():
             s = pd.concat(parts, axis=1).mean(axis=1).sort_index().to_numpy()
             t = M.dm_test(s, np.zeros_like(s), h=1)
             pooled.append({"mode": mode, "variant": variant, "signal": label, "n_dates": len(s),
