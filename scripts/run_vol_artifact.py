@@ -7,13 +7,16 @@ python scripts/run_vol_artifact.py --grid --seeds 50     # false-positive rate b
 python scripts/run_vol_artifact.py --root $ROOT --config ... --start 2025-01-01   # later dates only
 python scripts/run_vol_artifact.py --root $ROOT --config ... --modes labels --controls ret1w ret4w [--tag prereg2]
     # also partial out past returns (short-term reversal check) and test reversal on its own
+python scripts/run_vol_artifact.py --root $ROOT --config ... --events   # volatility-shock weeks
 """
 import argparse
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
-from pquant.vol_artifact import BIAS, decompose, past_return, shuffle_answers, simulate, tilt
+from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, past_return, pooled_series,
+                                  shock_dates, shuffle_answers, simulate, tilt, vol_rank)
 from pquant.config import load_config
 from pquant.prereg_tests import asset_frame
 from pquant.data import load_data
@@ -67,6 +70,9 @@ def main():
     ap.add_argument("--llm-model", default=None, help="read scores of this model (default: Llama)")
     ap.add_argument("--start", default=None, metavar="YYYY-MM-DD",
                     help="only use forecast dates from this day on (e.g. after a model's training cutoff)")
+    ap.add_argument("--events", action="store_true",
+                    help="does the result live in volatility-shock weeks? (drop them vs random weeks)")
+    ap.add_argument("--shock-quantile", type=float, default=0.9)
     ap.add_argument("--tag", default=None, help="suffix for the output folder (keeps runs on other assets apart)")
     ap.add_argument("--controls", nargs="*", default=[], choices=list(CONTROL_HORIZONS),
                     help="also partial out past returns; adds a reversal-only pseudo-mode")
@@ -118,7 +124,8 @@ def main():
         print("missing LLM scores:", ", ".join(missing))
     if not frames:
         raise SystemExit("nothing to report")
-    per_asset, pooled = decompose(pd.concat(frames, ignore_index=True), controls)
+    frames = pd.concat(frames, ignore_index=True)
+    per_asset, pooled = decompose(frames, controls)
     name = "artifact" + (f"_{args.llm_model.split('/')[-1]}" if args.llm_model else "")
     name += (f"_from{args.start}" if args.start else "") + (f"_controls-{'-'.join(ctrl)}" if ctrl else "")
     name += f"_{args.tag}" if args.tag else ""
@@ -128,6 +135,8 @@ def main():
     per_asset.to_csv(out / "per_asset.csv", index=False)
     pooled.to_csv(out / "pooled.csv", index=False)
     show(per_asset, pooled, "real data")
+    if args.events:
+        events(frames, controls, args.shock_quantile, out)
     if args.answer_shuffle:
         answer_shuffle(real_inputs, args.answer_shuffle, pooled, out, ctrl, controls)
     print(f"\nwrote {out}")
@@ -156,6 +165,59 @@ def answer_shuffle(real_inputs, B: int, pooled: pd.DataFrame, out: Path, ctrl=()
         print(summ.to_string(index=False))
         print("A placebo t close to the real t (and frequent rejections) means the signal is carried by the\n"
               "volatility scale, not by the answers. Expect this for volbins and not for fixbins/labels.")
+
+
+def events(frames: pd.DataFrame, controls: dict, q: float, out: Path, B: int = 1000):
+    """Drop volatility-shock weeks (top 1-q by mean vol rank) and named events; compare with
+    dropping the same number of random weeks."""
+    series = pooled_series(frames, controls)
+    vr = vol_rank(frames)
+    named = event_dates(series.index)
+    top = f"top{round((1 - q) * 100)}pct_vol"
+    sets = {top: shock_dates(frames, q), **named,
+            "both_events": named["yen_carry_2024-08"].union(named["tariffs_2025-04"])}
+    rows = []
+    for (mode, variant, signal), s in series.items():
+        if signal not in ("raw", "partial_sigma"):
+            continue
+        for name, drop in sets.items():
+            rows.append({"mode": mode, "variant": variant, "signal": signal, "dropped": name,
+                         **drop_test(s, drop, B=B)})
+    res = pd.DataFrame(rows)
+    res.to_csv(out / "events.csv", index=False)
+    wide = series.copy()
+    wide.columns = ["/".join(c) for c in wide.columns]
+    wide.assign(vol_rank=vr).to_csv(out / "per_date.csv")
+    with pd.option_context("display.width", 200, "display.max_rows", 200, "display.precision", 3):
+        for name, d in sets.items():
+            print(f"{name}: {len(d)} dates: " + ", ".join(str(x.date()) for x in d))
+        print(f"\n== volatility-shock weeks: pooled t with all dates vs without them ({B} random drops) ==")
+        print(res.drop(columns="n_dates").to_string(index=False))
+        print("p_random small = dropping these weeks moves t toward 0 far more than dropping random weeks.")
+        key = ("volbins", "shuffled", "raw")
+        if key in series:
+            worst = series[key].nsmallest(8)
+            print("\n== dates pushing volbins/shuffled most negative ==")
+            print(pd.DataFrame({"contribution": worst, "vol_rank": vr.reindex(worst.index)}).to_string())
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return
+    keys = [k for k in [("volbins", "shuffled", "raw"), ("volbins", "real", "raw"),
+                        ("fixbins", "real", "raw"), ("labels", "real", "raw")] if k in series]
+    fig, axes = plt.subplots(len(keys), 1, figsize=(10, 2.2 * len(keys)), sharex=True, squeeze=False)
+    for ax, k in zip(axes[:, 0], keys):
+        ax.bar(series.index, series[k], width=4, color="#444")
+        for d in sets[top]:
+            ax.axvspan(d - pd.Timedelta(days=3), d + pd.Timedelta(days=3), color="#f2a65a", alpha=0.35, lw=0)
+        ax.axhline(0, color="#999", lw=0.6)
+        ax.set_ylabel("/".join(k[:2]), fontsize=8)
+    fig.suptitle("Per-week contribution to the pooled test (orange = high-volatility weeks)", fontsize=10)
+    fig.tight_layout()
+    fig.savefig(out / "events.png", dpi=150)
+    print(f"plot: {out / 'events.png'}")
 
 
 def grid(seeds: int):

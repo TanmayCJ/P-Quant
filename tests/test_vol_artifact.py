@@ -4,7 +4,8 @@ import numpy as np
 import pandas as pd
 
 from pquant import metrics as M
-from pquant.vol_artifact import BIAS, decompose, partial_ic, past_return, shuffle_answers, simulate, tilt
+from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, partial_ic, past_return,
+                                 pooled_series, shock_dates, shuffle_answers, simulate, tilt)
 from pquant.config import DEFAULTS
 from pquant.fusion import bin_edges, llm_only_samples
 from pquant.news_scoring import build_inputs, llm_dir, origins_frame
@@ -112,3 +113,30 @@ def test_decompose_partials_out_extra_control():
     t = pooled.set_index("signal")["t"]
     assert t["raw"] < -5 and abs(t["partial_x"]) < 3
     assert (per["corr_signal_x"] > 0.8).all() and "ic_partial_x" in per
+
+
+def test_pooled_series_matches_decompose():
+    f = simulate(info=0.0, seed=5, T=120)
+    _, pooled = decompose(f)
+    ser = pooled_series(f)
+    for _, row in pooled.iterrows():
+        assert np.isclose(ser[(row["mode"], row["variant"], row["signal"])].mean(), row["mean_d"])
+
+
+def test_drop_test_finds_concentrated_dates():
+    rng = np.random.default_rng(1)
+    idx = pd.date_range("2024-07-07", periods=115, freq="W")
+    s = pd.Series(rng.normal(0, 0.3, 115), index=idx)
+    shock = idx[::12]
+    s[shock] -= 2.0                                           # all of the "signal" sits in 10 weeks
+    res = drop_test(s, shock, B=300)
+    assert res["n_dropped"] == len(shock) and res["t_all"] < -2
+    assert abs(res["t_kept"]) < 1.5 and res["p_random"] < 0.01 and res["share_of_sum"] > 0.8
+
+
+def test_shock_and_event_dates():
+    f = simulate(info=0.0, seed=2, T=120)
+    d = shock_dates(f, 0.9)
+    assert 10 <= len(d) <= 14
+    ev = event_dates(pd.date_range("2024-07-07", periods=60, freq="W"))
+    assert len(ev["yen_carry_2024-08"]) in (1, 2) and len(ev["tariffs_2025-04"]) in (1, 2)

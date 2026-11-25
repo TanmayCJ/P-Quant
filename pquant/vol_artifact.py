@@ -158,3 +158,70 @@ def simulate(n_assets: int = 9, T: int = 400, kappa: float = 0.25, info: float =
                 out.append(pd.DataFrame({"asset": f"S{a}", "mode": mode, "variant": variant,
                                          "date": dates, "eq": e, "sigma": sigma, "r": r}))
     return pd.concat(out, ignore_index=True)
+
+
+# --- volatility-shock weeks ------------------------------------------------------------------
+
+EVENTS = {"yen_carry_2024-08": "2024-08-05", "tariffs_2025-04": "2025-04-03"}
+
+
+def pooled_series(frames: pd.DataFrame, controls: dict | None = None) -> pd.DataFrame:
+    """Per-date contributions to the pooled test (the series whose mean decompose() tests):
+    one column per (mode, variant, signal), indexed by date."""
+    controls = controls or {"partial_sigma": ["sigma"]}
+    cols = {}
+    for (mode, variant), f in frames.groupby(["mode", "variant"]):
+        parts = {label: [] for label in ["raw", *controls]}
+        for _, g in f.groupby("asset"):
+            e, r, dates = g["eq"].to_numpy(float), g["r"].to_numpy(float), g["date"].to_numpy()
+            parts["raw"].append(pd.Series(_zprod(e, r), index=dates))
+            for label, c in controls.items():
+                parts[label].append(pd.Series(_zprod(_resid(e, g[c].to_numpy(float)), r), index=dates))
+        for label, p in parts.items():
+            cols[(mode, variant, label)] = pd.concat(p, axis=1).mean(axis=1)
+    return pd.DataFrame(cols).sort_index()
+
+
+def vol_rank(frames: pd.DataFrame) -> pd.Series:
+    """Per date: mean across assets of sigma's percentile rank within its own asset (0-1)."""
+    f = frames.drop_duplicates(["asset", "date"])
+    rk = f.groupby("asset")["sigma"].rank(pct=True)
+    return rk.groupby(f["date"]).mean().sort_index()
+
+
+def shock_dates(frames: pd.DataFrame, q: float = 0.9) -> pd.DatetimeIndex:
+    """Dates whose mean volatility rank is in the top (1 - q) share."""
+    vr = vol_rank(frames)
+    return pd.DatetimeIndex(vr.index[vr >= vr.quantile(q)])
+
+
+def event_dates(dates, events: dict = EVENTS, days: int = 7) -> dict:
+    """Forecast dates within +-days of each named event."""
+    d = pd.DatetimeIndex(dates)
+    out = {}
+    for name, day in events.items():
+        e = pd.Timestamp(day)
+        if d.tz is not None:
+            e = e.tz_localize(d.tz)
+        out[name] = d[(d > e - pd.Timedelta(days=days)) & (d <= e + pd.Timedelta(days=days))]
+    return out
+
+
+def drop_test(s: pd.Series, drop, B: int = 1000, seed: int = 0) -> dict:
+    """Pooled t with and without the given dates, and how unusual the change is compared with
+    dropping the same number of random dates (p_random: share of random drops whose t ends at
+    least as high, i.e. at least as far from a negative signal)."""
+    s = s.dropna()
+    mask = s.index.isin(pd.DatetimeIndex(drop))
+    k = int(mask.sum())
+    x = s.to_numpy(float)
+
+    def tstat(v):
+        return M.dm_test(v, np.zeros_like(v), h=1)["stat"]
+
+    t_all, t_kept = tstat(x), tstat(x[~mask])
+    rng = np.random.default_rng(seed)
+    rand = np.array([tstat(np.delete(x, rng.choice(len(x), k, replace=False))) for _ in range(B)])
+    return {"n_dates": len(x), "n_dropped": k, "t_all": t_all, "t_kept": t_kept,
+            "share_of_sum": float(x[mask].sum() / x.sum()) if x.sum() else float("nan"),
+            "t_random_mean": float(rand.mean()), "p_random": float((rand >= t_kept).mean())}
