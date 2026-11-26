@@ -12,6 +12,8 @@ python scripts/run_vol_artifact.py --root $ROOT --config ... --modes volbins --l
 python scripts/run_vol_artifact.py --grid-predict    # formula vs simulation grid (no data needed)
 python scripts/run_vol_artifact.py --root $ROOT --config ... --pnl 1000   # backtest P&L + answer-shuffle placebo
 python scripts/run_vol_artifact.py --pnl-sim         # does an uninformative model show backtest "alpha"? (no data)
+python scripts/run_vol_artifact.py --grid --grid-predict --seeds 200 --T 115   # grid at the real sample length
+python scripts/run_vol_artifact.py --root $ROOT --config ... --modes volbins --grid-position   # real sample on the grid
 """
 import argparse
 from pathlib import Path
@@ -21,7 +23,8 @@ import pandas as pd
 
 from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, past_return, pooled_series,
                                   shock_dates, shuffle_answers, simulate, tilt, vol_rank,
-                                  grid_predict, lean_table, predict_pooled, pnl_sim, pnl_table)
+                                  grid_predict, lean_table, predict_pooled, pnl_sim, pnl_table,
+                                  grid_position, sim_lean_ratios)
 from pquant.config import load_config
 from pquant.prereg_tests import asset_frame
 from pquant.data import load_data
@@ -82,6 +85,9 @@ def main():
     ap.add_argument("--shock-quantile", type=float, default=0.9)
     ap.add_argument("--lean", action="store_true", help="predict the fake signal from the answers' lean")
     ap.add_argument("--grid-predict", action="store_true", help="formula's false-alarm rate per grid cell")
+    ap.add_argument("--T", type=int, default=400, help="periods per simulated panel for --grid / --grid-predict")
+    ap.add_argument("--grid-position", action="store_true",
+                    help="place the real sample on the simulation grid (kappa_hat, alpha-equivalent; T=115)")
     ap.add_argument("--pnl", type=int, default=None, metavar="B",
                     help="backtest P&L of the forecasts, with B answer-shuffle placebo draws (0 = none)")
     ap.add_argument("--pnl-sim", action="store_true", help="P&L of an uninformative model, simulation grid")
@@ -91,10 +97,10 @@ def main():
     args = ap.parse_args()
 
     if args.grid_predict:
-        res = grid_predict()
+        res = grid_predict(T=args.T)
         Path("reports/artifact").mkdir(parents=True, exist_ok=True)
-        res.to_csv("reports/artifact/grid_predict.csv", index=False)
-        print("== formula: predicted false-alarm rate, volbins, rows kappa, cols alpha ==")
+        res.to_csv(f"reports/artifact/grid_predict{_tsuffix(args.T)}.csv", index=False)
+        print(f"== formula: predicted false-alarm rate, volbins, T={args.T}, rows kappa, cols alpha ==")
         print(res.pivot(index="kappa", columns="alpha", values="false_alarm_predicted").round(2).to_string())
         if not args.config and not args.grid:
             return
@@ -108,7 +114,7 @@ def main():
         if not args.config and not args.grid:
             return
     if args.grid:
-        grid(args.seeds)
+        grid(args.seeds, args.T)
         if not args.config:
             return
 
@@ -168,6 +174,8 @@ def main():
     show(per_asset, pooled, "real data")
     if args.lean:
         lean(frames, pooled, out)
+    if args.grid_position:
+        position(frames, out)
     if args.pnl is not None:
         pnl(frames, out, args.pnl)
     if args.events:
@@ -284,26 +292,41 @@ def lean(frames: pd.DataFrame, pooled: pd.DataFrame, out: Path):
         print("Compare t_predicted with the answer-shuffle placebo's mean t (the uninformative benchmark).")
 
 
-def grid(seeds: int):
+def _tsuffix(T: int) -> str:
+    return "" if T == 400 else f"_T{T}"
+
+
+def position(frames: pd.DataFrame, out: Path):
+    """Where the real sample sits on the simulation grid (rule H2 in the analysis plan)."""
+    res = pd.DataFrame([grid_position(frames, sim_lean_ratios(T=115))])
+    res.to_csv(out / "grid_position.csv", index=False)
+    with pd.option_context("display.width", 200, "display.precision", 3):
+        print("\n== real sample on the simulation grid (volbins, real headlines) ==")
+        print(res.to_string(index=False))
+
+
+def grid(seeds: int, T: int = 400):
     """False-positive rate of the pooled one-sided test with an uninformative LLM, across the
-    strength of the volatility-return relation (kappa) and of the response bias (alpha)."""
+    strength of the volatility-return relation (kappa) and of the response bias (alpha).
+    One row per mode and signal (raw, and with sigma partialled out)."""
     rows = []
     for kappa in (0.0, 0.1, 0.25, 0.5):
         for alpha in (0.0, 0.5, 1.0, 1.5):
-            pooled = pd.concat([decompose(simulate(kappa=kappa, bias=tilt(BIAS, alpha), seed=s))[1]
+            pooled = pd.concat([decompose(simulate(T=T, kappa=kappa, bias=tilt(BIAS, alpha), seed=s))[1]
                                 for s in range(seeds)])
-            p = pooled[(pooled["variant"] == "real") & (pooled["signal"] == "raw")]
-            for mode, g in p.groupby("mode"):
-                rows.append({"kappa": kappa, "alpha": alpha, "mode": mode,
+            p = pooled[pooled["variant"] == "real"]
+            for (mode, signal), g in p.groupby(["mode", "signal"]):
+                rows.append({"kappa": kappa, "alpha": alpha, "mode": mode, "signal": signal,
                              "false_positive_rate": (g["p_one_sided_neg"] < 0.05).mean()})
     res = pd.DataFrame(rows)
     out = Path("reports") / "artifact"
     out.mkdir(parents=True, exist_ok=True)
-    res.to_csv(out / "grid.csv", index=False)
-    for mode, g in res.groupby("mode"):
-        print(f"== grid, {mode}: false-positive rate, rows kappa (rebound), cols alpha (bias), {seeds} panels ==")
+    path = out / f"grid{_tsuffix(T)}.csv"
+    res.to_csv(path, index=False)
+    for (mode, signal), g in res.groupby(["mode", "signal"]):
+        print(f"== grid T={T}, {mode} / {signal}: false-positive rate, rows kappa, cols alpha, {seeds} panels ==")
         print(g.pivot(index="kappa", columns="alpha", values="false_positive_rate").round(2).to_string(), "\n")
-    print(f"wrote {out / 'grid.csv'}")
+    print(f"wrote {path}")
 
 
 if __name__ == "__main__":

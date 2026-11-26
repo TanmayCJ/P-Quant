@@ -7,7 +7,8 @@ from pquant import metrics as M
 from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, partial_ic, past_return,
                                  pooled_series, shock_dates, shuffle_answers, simulate, tilt,
                                  false_alarm_rate, leak_factor, lean_table,
-                                 pnl_stats, pnl_table, portfolio, shuffle_signal, weights)
+                                 pnl_stats, pnl_table, portfolio, shuffle_signal, weights,
+                                 grid_position, predict_pooled, sim_lean_ratios)
 from pquant.config import DEFAULTS
 from pquant.fusion import bin_edges, llm_only_samples
 from pquant.news_scoring import build_inputs, llm_dir, origins_frame
@@ -196,3 +197,22 @@ def test_shuffle_signal_keeps_sigma_and_values():
     t = pnl_table(f[f["variant"] == "real"], B=5)
     assert {"placebo_sharpe_p05", "share_placebo_sharpe_ge_real"} <= set(t.columns)
     assert set(t[t["mode"] == "labels"]["rule"]) == {"voltarget"}
+
+
+def test_grid_position_recovers_the_simulated_kappa_and_alpha():
+    f = simulate(T=1500, kappa=0.25, bias=BIAS, seed=7)
+    sim_lean = sim_lean_ratios(T=115, panels=4)
+    pos = grid_position(f, sim_lean)
+    assert pos["kappa_lo"] < 0.25 < pos["kappa_hi"]
+    assert pos["lean_side"] == "bearish"
+    assert abs(pos["alpha_equiv"] - 1.0) < 0.25
+    assert sim_lean[0.0] == min(sim_lean, key=abs)  # no habit, no lean
+
+
+def test_measured_leak_prediction_is_reported_next_to_the_formula():
+    f = simulate(T=300, kappa=0.25, seed=3)
+    f = f[f["mode"] == "volbins"]
+    pp = predict_pooled(f, decompose(f)[1])
+    assert {"t_predicted", "t_predicted_measured"} <= set(pp.columns)
+    real = pp[pp["variant"] == "real"].iloc[0]
+    assert np.sign(real["t_predicted_measured"]) == np.sign(real["t_predicted"])

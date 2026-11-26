@@ -267,10 +267,12 @@ def predict_pooled(frames: pd.DataFrame, pooled: pd.DataFrame) -> pd.DataFrame:
         o = obs.loc[(mode, variant)]
         se = o["mean_d"] / o["t"]
         t_pred = g["ic_predicted"].mean() / se
+        ic_meas = (g["L_measured"] * g["corr_sigma_r"]).mean()  # same prediction, measured leak factor
         rows.append({"mode": mode, "variant": variant, "lean_ratio": g["lean_ratio"].mean(),
                      "L_formula": g["L_formula"].mean(), "L_measured": g["L_measured"].mean(),
                      "corr_sigma_r": g["corr_sigma_r"].mean(), "ic_predicted": g["ic_predicted"].mean(),
-                     "ic_observed": g["ic_observed"].mean(), "t_predicted": t_pred, "t_observed": o["t"],
+                     "ic_observed": g["ic_observed"].mean(), "t_predicted": t_pred,
+                     "t_predicted_measured": ic_meas / se, "t_observed": o["t"],
                      "false_alarm_predicted": false_alarm_rate(t_pred)})
     return pd.DataFrame(rows)
 
@@ -298,6 +300,43 @@ def grid_predict(kappas=(0.0, 0.1, 0.25, 0.5), alphas=(0.0, 0.5, 1.0, 1.5), T: i
                          "corr_sigma_r": np.mean(rhos), "t_expected": t_exp,
                          "false_alarm_predicted": false_alarm_rate(t_exp)})
     return pd.DataFrame(rows)
+
+
+def sim_lean_ratios(alphas=(0.0, 0.5, 1.0, 1.5), T: int = 115, n_assets: int = 9, panels: int = 20,
+                    seed: int = 30000) -> pd.Series:
+    """Mean lean ratio of the simulated answers (volbins, real) for each habit strength alpha. The lean
+    depends on the answers only, so kappa is fixed at 0."""
+    out = {}
+    for alpha in alphas:
+        lams = []
+        for i in range(panels):
+            f = simulate(n_assets=n_assets, T=T, kappa=0.0, bias=tilt(BIAS, alpha), seed=seed + i)
+            lams.append(lean_table(f[(f["mode"] == "volbins") & (f["variant"] == "real")])["lean_ratio"].mean())
+        out[alpha] = float(np.mean(lams))
+    return pd.Series(out, name="lean_ratio")
+
+
+def grid_position(frames: pd.DataFrame, sim_lean: pd.Series) -> dict:
+    """Where a real sample sits on the simulation grid (volbins, real headlines).
+    kappa_hat: per-asset OLS slope of r on (sigma - mean sigma), the simulation's own equation; pooled as the
+    mean over assets with SE = sd / sqrt(n). alpha_equiv: the simulated alpha with the same |lean ratio|
+    (linear interpolation; the simulated habit is bearish, so a bullish model is placed at its mirror image)."""
+    f = frames[(frames["mode"] == "volbins") & (frames["variant"] == "real")]
+    ks, lams = [], []
+    for _, g in f.groupby("asset"):
+        v, r = g["sigma"].to_numpy(float), g["r"].to_numpy(float)
+        x = v - v.mean()
+        ks.append(float(x @ (r - r.mean()) / (x @ x)))
+        m = g["eq"].to_numpy(float) / v
+        lams.append(m.mean() / m.std())
+    ks, lam = np.array(ks), float(np.mean(lams))
+    k, se = float(ks.mean()), float(ks.std(ddof=1) / np.sqrt(len(ks)))
+    grid_l = np.abs(sim_lean.to_numpy(float))
+    order = np.argsort(grid_l)
+    a_eq = float(np.interp(abs(lam), grid_l[order], sim_lean.index.to_numpy(float)[order]))
+    return {"n_assets": len(ks), "kappa_hat": k, "kappa_se": se, "kappa_lo": k - 1.96 * se,
+            "kappa_hi": k + 1.96 * se, "lean_ratio": lam, "lean_side": "bearish" if lam < 0 else "bullish",
+            "alpha_equiv": a_eq, "alpha_capped": bool(abs(lam) > grid_l.max())}
 
 
 # --- trading P&L: does the trap show up in a backtest? ----------------------------------------
