@@ -298,3 +298,108 @@ def grid_predict(kappas=(0.0, 0.1, 0.25, 0.5), alphas=(0.0, 0.5, 1.0, 1.5), T: i
                          "corr_sigma_r": np.mean(rhos), "t_expected": t_exp,
                          "false_alarm_predicted": false_alarm_rate(t_exp)})
     return pd.DataFrame(rows)
+
+
+# --- trading P&L: does the trap show up in a backtest? ----------------------------------------
+
+def _scaled(w: np.ndarray) -> np.ndarray:
+    m = np.abs(w).mean()
+    return w / m if m > 0 else w
+
+
+def weights(g: pd.DataFrame, rule: str) -> np.ndarray:
+    """Position per week for one asset. vol-target: sign(forecast)/sigma; mean-variance:
+    forecast/sigma^2; volmanaged (benchmark): 1/sigma. Scaled to mean |w| = 1."""
+    e, v = g["eq"].to_numpy(float), g["sigma"].to_numpy(float)
+    if rule == "voltarget":
+        w = np.sign(e) / v
+    elif rule == "meanvar":
+        w = e / v ** 2
+    elif rule == "volmanaged":
+        w = 1 / v
+    else:
+        raise ValueError(rule)
+    return _scaled(w)
+
+
+def portfolio(frames: pd.DataFrame, rule: str) -> pd.Series:
+    """Equal-weight average across assets of w * r, per date."""
+    parts = []
+    for _, g in frames.groupby("asset"):
+        g = g.sort_values("date")
+        parts.append(pd.Series(weights(g, rule) * g["r"].to_numpy(float), index=g["date"].to_numpy()))
+    return pd.concat(parts, axis=1).mean(axis=1).sort_index()
+
+
+def _alpha(y: np.ndarray, X: np.ndarray) -> tuple[float, float]:
+    """OLS intercept and its t (plain standard errors)."""
+    X = np.column_stack([np.ones(len(y)), X])
+    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+    resid = y - X @ beta
+    if resid @ resid <= 1e-20 * ((y - y.mean()) @ (y - y.mean())):
+        return 0.0, 0.0  # position is exactly a mix of the benchmarks: no alpha by construction
+    dof = len(y) - X.shape[1]
+    cov = resid @ resid / dof * np.linalg.inv(X.T @ X)
+    return float(beta[0]), float(beta[0] / np.sqrt(cov[0, 0]))
+
+
+def pnl_stats(frames: pd.DataFrame, rule: str, periods: int = 52) -> dict:
+    """Sharpe and alpha t vs buy-and-hold, and vs buy-and-hold + volatility-managed long."""
+    p = portfolio(frames, rule)
+    bh = frames.groupby("date")["r"].mean().reindex(p.index)
+    vm = portfolio(frames, "volmanaged").reindex(p.index)
+    y = p.to_numpy(float)
+    a1, t1 = _alpha(y, bh.to_numpy(float))
+    a2, t2 = _alpha(y, np.column_stack([bh.to_numpy(float), vm.to_numpy(float)]))
+    return {"n_dates": len(y), "sharpe": float(y.mean() / y.std(ddof=1) * np.sqrt(periods)),
+            "alpha_bh": a1, "t_alpha_bh": t1, "alpha_bh_vm": a2, "t_alpha_bh_vm": t2}
+
+
+def shuffle_signal(frames: pd.DataFrame, seed: int) -> pd.DataFrame:
+    """Answer-shuffle placebo on frames: per (mode, variant, asset) permute the answers across dates,
+    keep sigma. Volbins: forecast = sigma * shuffled(forecast / sigma); other modes: shuffled forecast."""
+    rng = np.random.default_rng(seed)
+    out = frames.copy()
+    for (mode, _, _), idx in frames.groupby(["mode", "variant", "asset"]).groups.items():
+        e, v = frames.loc[idx, "eq"].to_numpy(float), frames.loc[idx, "sigma"].to_numpy(float)
+        perm = rng.permutation(len(idx))
+        out.loc[idx, "eq"] = v * (e / v)[perm] if mode == "volbins" else e[perm]
+    return out
+
+
+PNL_RULES = {"volbins": ("voltarget", "meanvar"), "fixbins": ("voltarget", "meanvar"), "labels": ("voltarget",)}
+
+
+def pnl_table(frames: pd.DataFrame, B: int = 0, seed: int = 0) -> pd.DataFrame:
+    """P&L stats per (mode, variant, rule); with B > 0 adds the answer-shuffle placebo for real headlines."""
+    rows = []
+    for (mode, variant), f in frames.groupby(["mode", "variant"]):
+        for rule in PNL_RULES.get(mode, ("voltarget",)):
+            row = {"mode": mode, "variant": variant, "rule": rule, **pnl_stats(f, rule)}
+            if B and variant == "real":
+                sh = np.array([pnl_stats(shuffle_signal(f, seed + b), rule)["sharpe"] for b in range(B)])
+                lo, hi = np.quantile(sh, [0.05, 0.95])
+                row.update({"placebo_sharpe_mean": float(sh.mean()), "placebo_sharpe_p05": float(lo),
+                            "placebo_sharpe_p95": float(hi),
+                            "share_placebo_sharpe_ge_real": float((sh >= row["sharpe"]).mean())})
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def pnl_sim(kappas=(0.0, 0.1, 0.25, 0.5), alphas=(0.0, 0.5, 1.0, 1.5), panels: int = 200, T: int = 115,
+            n_assets: int = 9, seed: int = 20000) -> pd.DataFrame:
+    """Uninformative model, volbins, real answers: share of panels where the vol-target backtest shows
+    |alpha t| > 1.96 vs buy-and-hold, and vs buy-and-hold + volatility-managed."""
+    rows = []
+    for kappa in kappas:
+        for alpha in alphas:
+            st = []
+            for s in range(panels):
+                f = simulate(n_assets=n_assets, T=T, kappa=kappa, bias=tilt(BIAS, alpha), seed=seed + s)
+                st.append(pnl_stats(f[(f["mode"] == "volbins") & (f["variant"] == "real")], "voltarget"))
+            st = pd.DataFrame(st)
+            rows.append({"kappa": kappa, "alpha": alpha, "mean_sharpe": st["sharpe"].mean(),
+                         "mean_t_alpha_bh": st["t_alpha_bh"].mean(),
+                         "rejects_bh": (st["t_alpha_bh"].abs() > 1.96).mean(),
+                         "rejects_bh_vm": (st["t_alpha_bh_vm"].abs() > 1.96).mean()})
+    return pd.DataFrame(rows)

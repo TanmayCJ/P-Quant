@@ -10,6 +10,8 @@ python scripts/run_vol_artifact.py --root $ROOT --config ... --modes labels --co
 python scripts/run_vol_artifact.py --root $ROOT --config ... --events   # volatility-shock weeks
 python scripts/run_vol_artifact.py --root $ROOT --config ... --modes volbins --lean   # predict the fake signal
 python scripts/run_vol_artifact.py --grid-predict    # formula vs simulation grid (no data needed)
+python scripts/run_vol_artifact.py --root $ROOT --config ... --pnl 1000   # backtest P&L + answer-shuffle placebo
+python scripts/run_vol_artifact.py --pnl-sim         # does an uninformative model show backtest "alpha"? (no data)
 """
 import argparse
 from pathlib import Path
@@ -19,7 +21,7 @@ import pandas as pd
 
 from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, past_return, pooled_series,
                                   shock_dates, shuffle_answers, simulate, tilt, vol_rank,
-                                  grid_predict, lean_table, predict_pooled)
+                                  grid_predict, lean_table, predict_pooled, pnl_sim, pnl_table)
 from pquant.config import load_config
 from pquant.prereg_tests import asset_frame
 from pquant.data import load_data
@@ -80,6 +82,9 @@ def main():
     ap.add_argument("--shock-quantile", type=float, default=0.9)
     ap.add_argument("--lean", action="store_true", help="predict the fake signal from the answers' lean")
     ap.add_argument("--grid-predict", action="store_true", help="formula's false-alarm rate per grid cell")
+    ap.add_argument("--pnl", type=int, default=None, metavar="B",
+                    help="backtest P&L of the forecasts, with B answer-shuffle placebo draws (0 = none)")
+    ap.add_argument("--pnl-sim", action="store_true", help="P&L of an uninformative model, simulation grid")
     ap.add_argument("--tag", default=None, help="suffix for the output folder (keeps runs on other assets apart)")
     ap.add_argument("--controls", nargs="*", default=[], choices=list(CONTROL_HORIZONS),
                     help="also partial out past returns; adds a reversal-only pseudo-mode")
@@ -91,6 +96,15 @@ def main():
         res.to_csv("reports/artifact/grid_predict.csv", index=False)
         print("== formula: predicted false-alarm rate, volbins, rows kappa, cols alpha ==")
         print(res.pivot(index="kappa", columns="alpha", values="false_alarm_predicted").round(2).to_string())
+        if not args.config and not args.grid:
+            return
+    if args.pnl_sim:
+        res = pnl_sim()
+        Path("reports/artifact").mkdir(parents=True, exist_ok=True)
+        res.to_csv("reports/artifact/pnl_sim.csv", index=False)
+        with pd.option_context("display.width", 200, "display.precision", 3):
+            print("== simulation: vol-target backtest of an uninformative model (volbins, T=115, 200 panels) ==")
+            print(res.to_string(index=False))
         if not args.config and not args.grid:
             return
     if args.grid:
@@ -154,6 +168,8 @@ def main():
     show(per_asset, pooled, "real data")
     if args.lean:
         lean(frames, pooled, out)
+    if args.pnl is not None:
+        pnl(frames, out, args.pnl)
     if args.events:
         events(frames, controls, args.shock_quantile, out)
     if args.answer_shuffle:
@@ -237,6 +253,18 @@ def events(frames: pd.DataFrame, controls: dict, q: float, out: Path, B: int = 1
     fig.tight_layout()
     fig.savefig(out / "events.png", dpi=150)
     print(f"plot: {out / 'events.png'}")
+
+
+def pnl(frames: pd.DataFrame, out: Path, B: int):
+    """Check 1: backtest P&L of the model's forecasts, vs buy-and-hold and the volatility-managed long."""
+    f = frames[~frames["mode"].str.startswith("reversal_")]
+    res = pnl_table(f, B=B)
+    res.to_csv(out / "pnl.csv", index=False)
+    with pd.option_context("display.width", 220, "display.precision", 3):
+        print(f"\n== trading P&L (weekly, no costs; answer-shuffle placebo {B} draws) ==")
+        print(res.to_string(index=False))
+        print("Diagnostic, not a strategy. 'Volatility timing' = real Sharpe inside the placebo's 5-95% range and\n"
+              "|t_alpha_bh_vm| < 1.96. Negative alpha = following the model lost money.")
 
 
 def lean(frames: pd.DataFrame, pooled: pd.DataFrame, out: Path):

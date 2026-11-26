@@ -6,7 +6,8 @@ import pandas as pd
 from pquant import metrics as M
 from pquant.vol_artifact import (BIAS, decompose, drop_test, event_dates, partial_ic, past_return,
                                  pooled_series, shock_dates, shuffle_answers, simulate, tilt,
-                                 false_alarm_rate, leak_factor, lean_table)
+                                 false_alarm_rate, leak_factor, lean_table,
+                                 pnl_stats, pnl_table, portfolio, shuffle_signal, weights)
 from pquant.config import DEFAULTS
 from pquant.fusion import bin_edges, llm_only_samples
 from pquant.news_scoring import build_inputs, llm_dir, origins_frame
@@ -165,3 +166,33 @@ def test_config_overrides_do_not_leak_between_loads():
     from pquant.config import load_config
     assert load_config("configs/vol_artifact/spy.yaml", ["llm.quant_bits=8"])["llm"]["quant_bits"] == 8
     assert load_config("configs/vol_artifact/spy.yaml")["llm"]["quant_bits"] == 4
+
+
+def test_weights_scaled_and_signed():
+    g = pd.DataFrame({"eq": [0.01, -0.02, 0.03], "sigma": [0.01, 0.02, 0.04], "r": [0.0, 0.0, 0.0]})
+    w = weights(g, "voltarget")
+    assert abs(np.abs(w).mean() - 1) < 1e-12 and np.sign(w).tolist() == [1, -1, 1]
+    assert np.allclose(weights(g, "volmanaged"), weights(g.assign(eq=1.0), "voltarget"))
+
+
+def test_constant_lean_backtest_is_volatility_managed():
+    f = simulate(info=0.0, seed=4, T=300, kappa=0.5, bias=(0.01, 0.02, 0.05, 0.12, 0.3, 0.3, 0.2))
+    f = f[(f["mode"] == "volbins") & (f["variant"] == "real")]
+    vt, vm = portfolio(f, "voltarget"), portfolio(f, "volmanaged")
+    assert np.corrcoef(vt, vm)[0, 1] > 0.95                  # bullish lean + 1/sigma = vol-managed long
+    st = pnl_stats(f, "voltarget")
+    assert abs(st["t_alpha_bh_vm"]) < abs(st["t_alpha_bh"])  # its "alpha" is the vol-managed benchmark's
+
+
+def test_shuffle_signal_keeps_sigma_and_values():
+    f = simulate(info=0.0, seed=5, T=60)
+    sh = shuffle_signal(f, seed=1)
+    assert (sh["sigma"] == f["sigma"]).all()
+    for (mode, variant, asset), g in f.groupby(["mode", "variant", "asset"]):
+        h = sh.loc[g.index]
+        a = g["eq"] / g["sigma"] if mode == "volbins" else g["eq"]
+        b = h["eq"] / h["sigma"] if mode == "volbins" else h["eq"]
+        assert np.allclose(np.sort(a), np.sort(b))
+    t = pnl_table(f[f["variant"] == "real"], B=5)
+    assert {"placebo_sharpe_p05", "share_placebo_sharpe_ge_real"} <= set(t.columns)
+    assert set(t[t["mode"] == "labels"]["rule"]) == {"voltarget"}
